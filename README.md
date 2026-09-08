@@ -16,7 +16,7 @@ Get there before the other nine people in the voice channel do.
 ## What it is
 
 Contexto's core idea, made competitive. You guess a word, the server tells you its
-rank against the secret — `1` is the answer, `150,000` is a different universe.
+rank against the secret. `1` is the answer, `150,000` is a different universe.
 Ranking is by *context*, not meaning: words that show up in the same places as the
 secret score well, which is why `bank` sits near `river` and near `money` at the
 same time.
@@ -65,7 +65,7 @@ leaderboard. They just have no Discord identity attached.
 ## Quick match
 
 Quick match is deliberately not configurable. It drops you into a shared
-ten-player lobby and starts on its own — thirty seconds once a second player
+ten-player lobby and starts on its own: thirty seconds once a second player
 arrives, five once the lobby is full. Nobody is the host and nobody can change
 the settings, which is what keeps it a one-click front door.
 
@@ -80,7 +80,7 @@ Seven of them, cycled from the button in the header (right-click for the full
 list): Midnight, Daylight, Ember, Moss, Paper, Neon and Mono.
 
 Each one redefines the same fifteen colour tokens and nothing else, so a theme
-can repaint the app but never relayout it. The heat bands are tokens too —
+can repaint the app but never relayout it. The heat bands are tokens too:
 `--band-hot/warm/cold` map onto each theme's own palette, which is what lets
 Mono stay genuinely hueless and the three light themes keep their contrast.
 
@@ -110,8 +110,8 @@ are doing and, when they are in a public room, a button to join it.
 Requests are one row, not two: pressing add when someone has already added you
 accepts their request rather than creating a second one pointing the other way.
 Invites only work between actual friends, so they cannot be used to spam
-strangers. Guest accounts can play everything else but cannot use friends —
-there is no stable identity behind them to befriend.
+strangers. Guest accounts can play everything else but cannot use friends,
+because there is no stable identity behind them to befriend.
 
 ## Ranks
 
@@ -129,8 +129,8 @@ Your profile shows how far into your tier you are and what the next one costs.
 ## Reading someone's path
 
 The interesting part of a finished game is not the score, it is the route. Click
-any player on the results screen — or any of your own recent games on your
-profile — and you get every word they played, **in the order they played it**,
+any player on the results screen (or any of your own recent games on your
+profile) and you get every word they played, **in the order they played it**,
 with the rank and the clock. Hints and stolen words are marked.
 
 Wrong turns are the point. A path that goes `trombone → harbor` tells a better
@@ -139,7 +139,7 @@ story than "2 guesses" ever could.
 ## Sound
 
 Effects on, music off by default, both toggleable from the header. Everything is
-synthesised with WebAudio oscillators rather than shipped as files — a music loop
+synthesised with WebAudio oscillators rather than shipped as files. A music loop
 plus samples would be a megabyte or two on every cold load of a Discord Activity,
 and this way the "getting closer" cue tracks your actual rank instead of picking
 from three canned clips.
@@ -147,8 +147,8 @@ from three canned clips.
 Two music beds, switched on the room phase rather than the tab, so opening the
 leaderboard mid-match does not change the music:
 
-- **menu** — slow, open, long gaps. Meant to go unnoticed.
-- **game** — the same restraint with a steady pulse under it. Competitive
+- **menu**: slow, open, long gaps. Meant to go unnoticed.
+- **game**: the same restraint with a steady pulse under it. Competitive
   without being tense enough to distract from reading words.
 
 Both sit in A minor pentatonic so switching between them mid-session never
@@ -160,9 +160,9 @@ gesture, and an unhandled resume is a console error on every load.
 ## Words an opponent has taken
 
 In public games and duels, a word somebody already played is **closed** to you.
-You are told who took it and nothing else — no rank, not even whether it was
-warm — and the guess is not charged, because a word you are not allowed to play
-is not a turn you took.
+You are told who took it and nothing else: no rank, not even whether it was
+warm. The guess is not charged, because a word you are not allowed to play is
+not a turn you took.
 
 That is a setting, not a law. Turn `lockClaimedWords` off in a custom game and
 the word stays playable; the row is simply marked with who got there first. The
@@ -170,8 +170,8 @@ two behaviours read differently on purpose:
 
 | | |
 | --- | --- |
-| Your own repeat | "You already guessed this word." — free, re-pins the original row |
-| Someone else's word, lock off | "Alder guessed this word before you." — you still get the rank |
+| Your own repeat | "You already guessed this word." Free, and re-pins the original row |
+| Someone else's word, lock off | "Alder guessed this word before you." You still get the rank |
 | Someone else's word, lock on | refused, names them, costs nothing |
 
 ## Forms and spellings
@@ -181,14 +181,14 @@ word, and the row tells you: `harborings` ranks as `harboring`, noted as
 "typed harborings".
 
 The guard that matters is the one that does **not** fire. Anything already in the
-list is ranked exactly as typed — `harbours`, `colour`, `organise` and `leaves`
+list is ranked exactly as typed: `harbours`, `colour`, `organise` and `leaves`
 are all their own entries with their own ranks, and nothing rewrites them. A
 word with two accepted spellings keeps both.
 
 Separately, a tier of *thin* words is refused outright: `very`, `important`,
 `different`, `basically` and about a hundred more. They are not rare or rude,
 they sit near everything, so they rank middling against any secret and teach you
-nothing. Real descriptors — `cold`, `heavy`, `sharp` — stay guessable, because
+nothing. Real descriptors (`cold`, `heavy`, `sharp`) stay guessable, because
 those are genuine signal about a genuine property.
 
 ## Moderators and statistics
@@ -205,7 +205,7 @@ Everyone else gets a 403 and a short explanation.
 ## FAQ, terms and privacy
 
 Reachable from the header and the home screen. The FAQ answers the questions
-this game actually generates — why a word was rejected, what the colours mean,
+this game actually generates: why a word was rejected, what the colours mean,
 whether plurals count, how the tiers work. The privacy page is specific rather
 than boilerplate, because the data model is right here: Discord id, name and
 avatar hash, your matches and guesses, and aggregate player counts. No email, no
@@ -221,7 +221,7 @@ npm run seed          # optional: demo players so the leaderboard is not empty
 npm run dev           # server on :3001, client on :3000
 ```
 
-Open <http://localhost:3000> and hit **Play as guest** — no account, no Discord.
+Open <http://localhost:3000> and hit **Play as guest**. No account, no Discord.
 Open a second tab (or send someone the room code) and you are two players online
 against each other. Guests are real accounts for the length of a session: they
 host rooms, hold sockets, reconnect mid-match. They just stay off the ladders.
@@ -247,7 +247,7 @@ Node 20+. No Redis, no Postgres required.
 6. Launch the Activity from a voice channel.
 
 Everyone who opens the Activity in the same voice channel lands in the same room
-automatically — the client passes Discord's `instanceId` on the socket handshake
+automatically: the client passes Discord's `instanceId` on the socket handshake
 and the server keys a room off it. Nobody reads a code out loud.
 
 ## The ranking engine
@@ -257,7 +257,7 @@ Given a secret word, rank the entire vocabulary by how near each word sits to it
 ### Vectors
 
 `npm run setup:words` pulls GloVe 6B (400k words × 200 dimensions) from the
-gensim-data mirror — 252MB rather than Stanford's 822MB bundle — and compiles the
+gensim-data mirror (252MB rather than Stanford's 822MB bundle) and compiles the
 top 200,000 usable words into a compact binary index of L2-normalised float32
 vectors. Ranking is then a dot product against every row followed by a sort:
 **~95ms for a full 200,000-word ranking**, cached per secret as an `Int32Array`
@@ -279,11 +279,11 @@ right took four filters:
 1. **A Hunspell dictionary**, restricted to its lowercase stems. This is the
    load-bearing one. GloVe 6B is lowercased, so `rome`, `mohammed` and `kiev` are
    shaped exactly like common nouns and no regex will tell them apart. Hunspell
-   still carries the case — proper nouns are spelled `Jimmy/M`, common words
-   `rookie/SM` — so keeping only lowercase stems drops every proper noun at once.
+   still carries the case (proper nouns are spelled `Jimmy/M`, common words
+   `rookie/SM`), so keeping only lowercase stems drops every proper noun at once.
 2. **Base-form preference.** `hospitals`, `reporting` and `immensely` are rejected
    because a shorter dictionary form of each already exists. Answers are lemmas;
-   the inflections stay guessable. The length floors matter here — without them
+   the inflections stay guessable. The length floors matter here: without them
    `thing` reduces to `the` and `ring` to `re`.
 3. **A first-names list**, as a second guard.
 4. **A frequency window**, so answers are words people have actually met.
@@ -301,8 +301,8 @@ insane  precocious ovulation cagey paleontologist cirrhosis axon deduct reticenc
 centroid. That distinction is the whole feature: averaging a few hundred nature
 words produces a vector pointing at "generic frequent English", and every
 category came back as `well, even, another, kind`. Asking instead whether a word
-is close to *something* in the category — `otter` is close to `animal`, and that
-is enough — gives eight genuinely distinct pools of ~4,000 words each.
+is close to *something* in the category gives eight genuinely distinct pools of
+~4,000 words each. `otter` is close to `animal`, and that is enough.
 
 ### Without the download
 
@@ -327,7 +327,7 @@ width = exp(-rank / 800)     floored at 1%
 ```
 
 with the constant landing on 800.3 across every sampled point. An exponential is
-the right shape — the bar stays empty across the whole cold tail and only starts
+the right shape: the bar stays empty across the whole cold tail and only starts
 moving when you are genuinely close, which is exactly the feedback the game wants
 to give. Our τ is nudged to 1000 for a vocabulary 2.5× the size.
 
@@ -351,8 +351,8 @@ a 900-player room or unlock a setting the mode pins.
 
 **`Room`** is a plain state machine that knows nothing about sockets. It talks to
 a `RoomBus` interface that the socket layer implements. State is serialised *per
-viewer* — your guesses are always yours, opponents' boards are redacted according
-to the room's visibility setting, everything is revealed when the round ends.
+viewer*: your guesses are always yours, opponents' boards are redacted according
+to the room's visibility setting, and everything is revealed when the round ends.
 
 **Persistence** is best-effort by design. A database hiccup logs and returns the
 unaugmented result rather than stopping ten people from seeing their scores.
@@ -366,7 +366,7 @@ is one indexed read) · `Rating` (per-mode Elo) · `Match` / `Round` / `MatchPla
 leaderboards) · `UserAchievement`.
 
 SQLite by default. Change the provider in `prisma/schema.prisma` to `postgresql`
-and point `DATABASE_URL` at your instance — every model is provider agnostic.
+and point `DATABASE_URL` at your instance. Every model is provider agnostic.
 
 ## Tests
 
@@ -398,8 +398,8 @@ key.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `DISCORD_CLIENT_ID` / `_SECRET` | — | From your Discord application. Only needed for the Activity; guest play works without them. |
-| `SESSION_SECRET` | — | Signs the session JWT. 16+ characters. |
+| `DISCORD_CLIENT_ID` / `_SECRET` | none | From your Discord application. Only needed for the Activity; guest play works without them. |
+| `SESSION_SECRET` | none | Signs the session JWT. 16+ characters. |
 | `DATABASE_URL` | `file:./arena.db` | Swap for a `postgresql://` URL in production. |
 | `EMBEDDING_PROVIDER` | `auto` | `auto` \| `vectors` \| `topic`. |
 | `RANK_DEPTH` | `200000` | How deep the rank table goes. |
@@ -417,7 +417,7 @@ of resident memory, so size the instance accordingly.
 
 ### Railway
 
-**Nothing is required.** Connect the repo and deploy — the server boots with no
+**Nothing is required.** Connect the repo and deploy. The server boots with no
 environment variables at all and you get a working game: guest accounts, every
 mode, the daily, friends, leaderboards. The [`railway.toml`](railway.toml) wires
 up the build and start commands, so that really is the whole of it.
@@ -425,7 +425,7 @@ up the build and start commands, so that really is the whole of it.
 The database is handled for you too: with no `DATABASE_URL`, SQLite lands on the
 volume at `$RAILWAY_VOLUME_MOUNT_PATH/db/arena.db`, or in `server/data/` without
 one. That matters because the Prisma CLI reads `DATABASE_URL` straight from the
-environment — a default buried in application code is invisible to
+environment, and a default buried in application code is invisible to
 `prisma db push`, which runs on every boot.
 
 What you give up by setting nothing:
@@ -434,16 +434,16 @@ What you give up by setting nothing:
   appear on leaderboards; they just cannot use friends, since there is no
   durable identity behind them.
 - **The session secret is generated.** It is saved to the volume (or to
-  `server/data/`), so sessions survive a restart — but not a redeploy onto a
-  fresh filesystem, and not a second instance, which would invent its own.
+  `server/data/`), so sessions survive a restart. They do not survive a redeploy
+  onto a fresh filesystem, and a second instance would invent its own.
 
 The server prints exactly this at boot, so you never have to guess which mode
 you are in:
 
 ```
-warn  discord sign-in is off — everyone plays as a guest. Set DISCORD_CLIENT_ID
+warn  discord sign-in is off, so everyone plays as a guest. Set DISCORD_CLIENT_ID
       and DISCORD_CLIENT_SECRET to enable it.
-warn  SESSION_SECRET not set — generated one and saved it to /data/.session-secret.
+warn  SESSION_SECRET not set, so one was generated and saved to /data/.session-secret.
       Set SESSION_SECRET to keep sessions across redeploys.
 ```
 
@@ -463,7 +463,7 @@ warn  SESSION_SECRET not set — generated one and saved it to /data/.session-se
    | `SESSION_SECRET` | a random 32+ character string | sessions then survive a redeploy and scale past one instance |
    | `EMBEDDING_PROVIDER` | `vectors` for the 200k-word index, `topic` for the bundled 1,808-word model | `topic` skips the ~250MB download and boots in seconds |
 
-   `${{...}}` is Railway's variable-reference syntax — paste it literally and
+   `${{...}}` is Railway's variable-reference syntax. Paste it literally and
    Railway fills in the real value.
 
 #### Adding Discord later
@@ -475,11 +475,12 @@ baking it in, so you do not need to rebuild it, and CORS already allows any
 
 Deploy. The start command (`server/scripts/railway-start.mjs`) restores
 `data/index.bin` from the volume if it's there, otherwise downloads GloVe and
-builds it fresh (a few minutes, first boot only — every later deploy reads the
-cached copy off the volume), then runs `prisma db push` and starts the server.
+builds it fresh (a few minutes on first boot only, since every later deploy
+reads the cached copy off the volume), then runs `prisma db push` and starts
+the server.
 `PORT` is set by Railway automatically; the server already listens on
 `process.env.PORT`.
 
 Set `EMBEDDING_PROVIDER=topic` instead if you'd rather skip the download
-entirely and don't need the full 200,000-word vocabulary — it also means the
+entirely and don't need the full 200,000-word vocabulary. It also means the
 volume only needs to hold the database.

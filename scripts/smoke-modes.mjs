@@ -2,11 +2,11 @@
  * Exercises the modes with bespoke round logic, which the duel and lobby smoke
  * tests never touch:
  *
- *   elimination  — the coldest player is knocked out each round and the match
+ *   elimination: the coldest player is knocked out each round and the match
  *                  ends early once one survivor is left
- *   suddenDeath  — turn order is enforced and a guess that fails to beat the
+ *   suddenDeath: turn order is enforced and a guess that fails to beat the
  *                  board costs a strike
- *   coop         — one shared guess budget, one shared board
+ *   coop: one shared guess budget, one shared board
  *
  *   node scripts/smoke-modes.mjs
  */
@@ -18,7 +18,7 @@ const BASE = process.env.MIVIMOOSE_URL ?? 'http://localhost:3001';
 const results = [];
 function check(label, ok, detail = '') {
   results.push({ label, ok: Boolean(ok) });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

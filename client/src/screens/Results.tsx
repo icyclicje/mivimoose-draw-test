@@ -126,7 +126,7 @@ function roundRecap(round: RoundSummary): RoundRecap {
 }
 
 /* ------------------------------------------------------------------ *
- * Verdict — why this result happened
+ * Verdict: why this result happened
  * ------------------------------------------------------------------ */
 
 interface Verdict {
@@ -169,7 +169,7 @@ function settlementNote(
   if (leader.wordsFound !== runnerUp.wordsFound) {
     return `Level on ${leader.score.toLocaleString()} points, so words found settled it: ${leader.wordsFound} to ${runnerUp.wordsFound}.`;
   }
-  return `Level on ${leader.score.toLocaleString()} points and ${leader.wordsFound} words found — as close to a draw as the scoring gets.`;
+  return `Level on ${leader.score.toLocaleString()} points and ${leader.wordsFound} words found. That is as close to a draw as the scoring gets.`;
 }
 
 /** How close the runner-up got, for the one-word modes where that is the whole match. */
@@ -272,7 +272,7 @@ function buildVerdict(result: MatchResult): Verdict {
       icon: 'snowflake',
       color: 'var(--orange)',
       line: closest
-        ? `Nobody found it — ${closest.displayName} was closest at ${formatAway(closest.bestRank)}`
+        ? `Nobody found it. ${closest.displayName} was closest at ${formatAway(closest.bestRank)}`
         : 'Nobody found it, and nobody got a guess in',
       note,
     };
@@ -509,7 +509,7 @@ export function Results({ room }: { room: RoomState }) {
     return map;
   }, [replay]);
 
-  // The line that says why. Derived once — a result never changes after it lands.
+  // The line that says why. Derived once, since a result never changes after it lands.
   const verdict = useMemo(() => (result ? buildVerdict(result) : null), [result]);
 
   const openPath = useCallback((playerId: string) => {
@@ -552,7 +552,7 @@ export function Results({ room }: { room: RoomState }) {
     <div className="page" style={{ gap: 'var(--s4)' }}>
       {/* ---------------------------------------------------------- headline
           Who won, where you landed, and the two ways out. Everything else on
-          this screen is a click away — this line is all that must be read. */}
+          this screen is a click away, so this line is all that must be read. */}
       <motion.header
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -591,7 +591,7 @@ export function Results({ room }: { room: RoomState }) {
 
         <div className="row" style={{ gap: 'var(--s2)', flex: 'none' }}>
           {/* The server rejects a rematch from anyone but the host, so it is
-              disabled rather than hidden — a vanished button just reads as a
+              disabled rather than hidden. A vanished button just reads as a
               bug to everyone who isn't hosting. */}
           <button
             className="btn btn--primary"
@@ -733,10 +733,18 @@ export function Results({ room }: { room: RoomState }) {
         </div>
       </Section>
 
-      {/* ----------------------------------------------------------- rounds */}
+      {/* ----------------------------------------------------------- rounds
+          Today's daily played together is stored as an ordinary co-op match,
+          so the recorded mode on its own would label it "Co-op" and lose what
+          it actually was. The lobby and the board both name it, and the screen
+          that closes the same room has to agree with them. */}
       <Section
         title="Rounds"
-        action={<span className="chip chip--brand">{modeLabel(result.mode)}</span>}
+        action={
+          <span className="chip chip--brand">
+            {room.dailyCoop ? 'Daily co-op' : modeLabel(result.mode)}
+          </span>
+        }
       >
         {/* Marathon runs to 20 rounds, so this scrolls inside itself. */}
         <div className="col" style={{ gap: 'var(--s1)', maxHeight: 132, overflowY: 'auto' }}>
@@ -748,7 +756,7 @@ export function Results({ room }: { room: RoomState }) {
             result.rounds.map((round) => {
               // Who took it and how cheaply, or who came nearest and by how far.
               const recap = roundRecap(round);
-              const recapTitle = recap.detail ? `${recap.who} — ${recap.detail}` : recap.who;
+              const recapTitle = recap.detail ? `${recap.who}, ${recap.detail}` : recap.who;
               return (
                 <div
                   key={round.round}
@@ -810,7 +818,7 @@ export function Results({ room }: { room: RoomState }) {
       {/* ------------------------------------------------------------ paths */}
       <Modal
         open={pathOf !== null}
-        title={openEntry ? `${openEntry.displayName} — every guess` : 'Every guess'}
+        title={openEntry ? `Every guess by ${openEntry.displayName}` : 'Every guess'}
         onClose={closePath}
         width={560}
       >

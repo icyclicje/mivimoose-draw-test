@@ -42,7 +42,7 @@ function waitFor(socket, event, timeout = 15000) {
 const results = [];
 function check(label, condition, detail = '') {
   results.push({ label, ok: Boolean(condition), detail });
-  console.log(`${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 }
 
 async function main() {
@@ -55,7 +55,7 @@ async function main() {
 
   // Attach before any room traffic. The server pushes room:state from inside
   // the create/join handlers, so those frames are already in flight by the time
-  // an ack callback resolves — subscribing afterwards is a race.
+  // an ack callback resolves, so subscribing afterwards is a race.
   let aState = null;
   aSock.on('room:state', (s) => (aState = s));
   let bState = null;
@@ -103,7 +103,7 @@ async function main() {
 
   // Duplicate by the same player is rejected.
   const g3 = await ask(aSock, 'game:guess', { word: 'sailor' });
-  // Replaying your own word is not an error — the board re-pins the original
+  // Replaying your own word is not an error. The board re-pins the original
   // row and marks it, so a forgetful player is not punished with a red banner.
   check(
     'repeat by same player re-surfaces the original row',
@@ -118,7 +118,7 @@ async function main() {
   // Case and inflection handling. With the full GloVe index `waves` has its own
   // vector and its own rank, so it resolves to itself; the base-form fallback in
   // resolveWord only fires for input the vocabulary does not carry, which is the
-  // common case on the smaller bundled topic model. Either outcome is correct —
+  // common case on the smaller bundled topic model. Either outcome is correct,
   // what must hold is that the input is normalised and ranked rather than
   // rejected.
   const g5 = await ask(aSock, 'game:guess', { word: 'WAVES' });

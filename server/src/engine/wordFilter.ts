@@ -10,9 +10,9 @@ import { log } from '../log.js';
  * Two independent questions, because they have different answers on the two
  * sides of a round:
  *
- *   isBlocked     — obscenity and slurs. Never an answer, never a hint, never
+ *   isBlocked:      obscenity and slurs. Never an answer, never a hint, never
  *                   a reveal, never an accepted guess.
- *   isTooCommon   — function words and semantically thin filler. Never an
+ *   isTooCommon:    function words and semantically thin filler. Never an
  *                   answer; guessing is only barred for the function words,
  *                   which is what `forGuess` selects.
  */
@@ -37,7 +37,7 @@ let extraBlocked: Set<string> | null = null;
 /**
  * Operator additions, one word per line, `#` for comments. Lives in the same
  * `data/` directory as the word lists, which on a deployment is the persistent
- * volume — so a word can be banned without a redeploy.
+ * volume, so a word can be banned without a redeploy.
  */
 function getExtraBlocked(): Set<string> {
   if (extraBlocked) return extraBlocked;
@@ -69,7 +69,7 @@ export function isBlocked(word: string): boolean {
   if (hit !== undefined) return hit;
 
   // Not the same check as the one inside matches(): this one also skips the
-  // suffix pass below, which is the whole point — `spicy` only survives if it
+  // suffix pass below, which is the whole point. `spicy` only survives if it
   // is never reduced to `spic`.
   if (EXEMPT.has(w)) {
     cache.set(w, false);
@@ -104,8 +104,8 @@ export function isTooCommon(word: string, forGuess = false): boolean {
   const w = word.toLowerCase();
   // Function words and thin qualifiers are refused even as guesses: they rank
   // middling against every secret, so playing one costs a guess and tells you
-  // nothing. COMMON_WORDS are only barred as *answers* — "time" is a poor thing
-  // to hunt for but a perfectly reasonable probe.
+  // nothing. COMMON_WORDS are only barred as *answers*, since "time" is a poor
+  // thing to hunt for but a perfectly reasonable probe.
   if (FUNCTION_WORDS.has(w) || THIN_WORDS.has(w)) return true;
   return !forGuess && COMMON_WORDS.has(w);
 }

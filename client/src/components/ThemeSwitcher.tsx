@@ -34,7 +34,7 @@ export function ThemeSwitcher() {
       <button
         className="btn btn--ghost btn--sm"
         style={{ padding: '0 var(--s2)', gap: 'var(--s2)' }}
-        title={`Theme: ${themeMeta(theme).name} — click for ${upcoming.name}, right-click for all`}
+        title={`Theme: ${themeMeta(theme).name}. Click for ${upcoming.name}, right-click for all.`}
         aria-label={`Change theme. Currently ${themeMeta(theme).name}.`}
         onClick={() => setTheme((t) => nextTheme(t))}
         onContextMenu={(e) => {

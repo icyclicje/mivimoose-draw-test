@@ -87,7 +87,7 @@ export async function friendListFor(userId: string): Promise<FriendList> {
     else out.incoming.push(summary);
   }
 
-  // Friends who are online sort first — the list exists to find someone to play.
+  // Friends who are online sort first. The list exists to find someone to play.
   out.friends.sort((a, b) => Number(b.online) - Number(a.online) || a.user.displayName.localeCompare(b.user.displayName));
   return out;
 }
@@ -308,8 +308,8 @@ export async function serverStats(range: StatsRange): Promise<ServerStats> {
  * Every player's route through a finished match.
  *
  * Guesses are already stored per round with their rank and the millisecond they
- * were played, so the path is just those rows in play order — no reconstruction
- * needed.
+ * were played, so the path is just those rows in play order, with no
+ * reconstruction needed.
  */
 export async function matchReplay(matchId: string): Promise<MatchReplay | null> {
   const match = await prisma.match.findUnique({

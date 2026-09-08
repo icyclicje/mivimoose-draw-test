@@ -10,7 +10,7 @@ import { isBlocked } from './wordFilter.js';
 /**
  * Which words are allowed to be the answer.
  *
- * Guessing is open to the whole vector space — 200,000 words with a real GloVe
+ * Guessing is open to the whole vector space: 200,000 words with a real GloVe
  * index. Answers come from a much tighter pool, because "the word of the day is
  * `pcmcia`" is not a game, and neither is `hospitals`.
  *
@@ -28,7 +28,7 @@ import { isBlocked } from './wordFilter.js';
  *      pool. Answers should be lemmas; the inflections stay guessable.
  *   4. A frequency window, so answers are words people have actually met, with
  *      the two stopword tiers in data/stopwords.ts closing the gap the window
- *      is too shallow to reach — `time`, `people` and `thing` are common
+ *      is too shallow to reach. `time`, `people` and `thing` are common
  *      enough to sit deep in the vocabulary and still make thin answers.
  *   5. The blocklist in data/blocklist.ts: obscenity and slurs, which the
  *      Hunspell gate spells perfectly happily and would otherwise let through.
@@ -45,8 +45,8 @@ import { isBlocked } from './wordFilter.js';
 const SECRET_FREQUENCY_CEILING = 60_000;
 /**
  * Skip the very top of the vocabulary outright. GloVe's first few hundred
- * tokens are articles, prepositions, bare auxiliaries and punctuation — none of
- * them answers, and being the most frequent words in English they would
+ * tokens are articles, prepositions, bare auxiliaries and punctuation. None of
+ * them are answers, and being the most frequent words in English they would
  * otherwise anchor the easy band.
  */
 const SECRET_FREQUENCY_FLOOR = 250;
@@ -118,8 +118,8 @@ function readExtraSecrets(): string[] {
  * dictionary word. The length floors matter: without them `thing` reduces to
  * `the` and `ring` to `re`, and the pool loses perfectly good answers.
  *
- * Deliberately no `-er` rule — agent nouns like `player` and `teacher` are
- * words in their own right and make good answers.
+ * Deliberately no `-er` rule, because agent nouns like `player` and `teacher`
+ * are words in their own right and make good answers.
  */
 function isInflection(word: string, isBase: (w: string) => boolean): boolean {
   const ok = (base: string, minBase: number, minWord: number) =>
@@ -166,7 +166,7 @@ function buildLexicon(): Lexicon {
 
   if (usingVectors && !hunspell) {
     log.warn(
-      'lexicon: data/en.dic is missing — proper nouns will leak into the answer pool. ' +
+      'lexicon: data/en.dic is missing, so proper nouns will leak into the answer pool. ' +
         'See the README for the one-line download.',
     );
   }
@@ -364,7 +364,7 @@ export function pickSecrets(count: number, options: Omit<PickOptions, 'nth'>): s
 
 /**
  * The daily should be winnable on a coffee break. It draws from the most
- * everyday eighth of the answer pool — still well over a thousand candidates,
+ * everyday eighth of the answer pool, still well over a thousand candidates,
  * so it is gentle without ever being guessable in advance.
  */
 const DAILY_COMMONALITY_CEILING = 0.08;

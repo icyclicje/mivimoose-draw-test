@@ -16,7 +16,7 @@ const NAMES = ['Ada', 'Bo', 'Cyd', 'Dot', 'Eze', 'Fen', 'Gus', 'Hal', 'Ivy', 'Je
 const results = [];
 function check(label, ok, detail = '') {
   results.push({ label, ok: Boolean(ok) });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -87,7 +87,7 @@ async function main() {
   const started = await ask(host.socket, 'room:start');
   check('match started', started.ok, started.error ?? '');
   await roundStarted;
-  console.log('\nround live — everybody guessing\n');
+  console.log('\nround live and everybody guessing\n');
 
   // A spread of words so the standings are not all ties.
   const WORDS = ['wave', 'sailor', 'guitar', 'money', 'island', 'shark', 'coffee', 'harbor', 'piano', 'reef'];
@@ -104,7 +104,7 @@ async function main() {
   check('guesses registered on the board', anyRanked);
 
   // Classic closes claimed words by default, so a word another player already
-  // burned is refused rather than ranked — and the refusal names them. (The
+  // burned is refused rather than ranked, and the refusal names them. (The
   // marker-only variant, with the lock turned off, lives in smoke-rules.)
   const stealer = seats[1];
   const steal = await ask(stealer.socket, 'game:guess', { word: WORDS[0] });

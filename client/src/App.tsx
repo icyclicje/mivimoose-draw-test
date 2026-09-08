@@ -204,7 +204,7 @@ export default function App() {
           <button
             className="row"
             onClick={() => goTo('profile')}
-            title={`${user.displayName} — your profile`}
+            title={`${user.displayName}, your profile`}
             style={{ gap: 'var(--s2)', flex: 'none' }}
           >
             <span
@@ -229,7 +229,7 @@ export default function App() {
         {/*
           No AnimatePresence around the screen swap and no exit animation. With
           `mode="wait"` the incoming screen waits for the outgoing one to report
-          its exit finished, and the Game screen does not always report it — its
+          its exit finished, and the Game screen does not always report it. Its
           guess rows animate with `layout`, and a layout animation still running
           when the screen unmounts can swallow the callback. That left the app
           on a permanently blank page with the socket still connected.

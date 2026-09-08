@@ -15,7 +15,7 @@ export function bandLabel(band: RankBand): string {
 /**
  * A rank as a distance. In a multiplayer roster "8,002" is a number nobody can
  * interpret at a glance, while "8,002 away" is immediately a gap you are trying
- * to close — and "found it" is the obvious end of that scale.
+ * to close. "found it" is the obvious end of that same scale.
  */
 export function formatAway(rank: number | null | undefined): string {
   if (rank === null || rank === undefined) return 'no guesses';
@@ -24,7 +24,7 @@ export function formatAway(rank: number | null | undefined): string {
 }
 
 export function formatRank(rank: number | null | undefined): string {
-  if (rank === null || rank === undefined) return '—';
+  if (rank === null || rank === undefined) return '-';
   return rank.toLocaleString();
 }
 
@@ -37,7 +37,7 @@ export function formatClock(ms: number): string {
 }
 
 export function formatDuration(ms: number | null): string {
-  if (ms === null) return '—';
+  if (ms === null) return '-';
   if (ms < 1000) return `${ms}ms`;
   const s = ms / 1000;
   if (s < 60) return `${s.toFixed(1)}s`;

@@ -9,8 +9,8 @@ import { play, unlockAudio } from '../lib/sound';
 type DocTab = 'faq' | 'terms' | 'privacy';
 
 /* Everything on this screen is text, and there is a lot of it. The page itself
-   must not grow — the tab strip has to stay reachable in a 680px-tall frame —
-   so the reading area is capped and scrolls inside the panel. */
+   must not grow, because the tab strip has to stay reachable in a 680px-tall
+   frame, so the reading area is capped and scrolls inside the panel. */
 const READER_MAX = 'clamp(220px, calc(100vh - 250px), 540px)';
 
 const UPDATED = '7 September 2026';
@@ -103,7 +103,7 @@ const FAQ: Question[] = [
         <P>
           The model measures usage, not meaning. It learned from how words turn up beside each
           other in ordinary text, so <Word>bank</Word> sits near both <Word>river</Word> and{' '}
-          <Word>money</Word> — that is how the word is used. Spelling, length and rhyme count for
+          <Word>money</Word>. That is how the word is used. Spelling, length and rhyme count for
           nothing.
         </P>
       </>
@@ -120,7 +120,7 @@ const FAQ: Question[] = [
             'It is not in the 200,000-word list. The list is single words only, and it stops well short of the rarest technical and invented ones.',
             'It is in the list but sits in the unranked tail for this round, so there is no number to give you.',
             'It is shorter than two letters, or longer than thirty-two.',
-            'It is a function word — the, of, was — which ranks middling against everything and would only mislead you.',
+            'It is a function word (the, of, was), and those rank middling against everything, so they would only mislead you.',
             'It is on the blocklist.',
           ]}
         />
@@ -147,7 +147,7 @@ const FAQ: Question[] = [
               />
               <span style={{ fontSize: 13.5 }}>
                 <Word>{band.label}</Word>
-                <span className="dim"> — {band.text}</span>
+                <span className="dim">: {band.text}</span>
               </span>
             </div>
           ))}
@@ -180,9 +180,9 @@ const FAQ: Question[] = [
     a: (
       <>
         <P>
-          Quick match is one fixed setup with no knobs: a full lobby — ten players in classic, two
-          in a duel — ranked, and the round ends the moment somebody lands the word. It starts
-          itself, so you join and wait.
+          Quick match is one fixed setup with no knobs. The lobby fills up (ten players in
+          classic, two in a duel), the match is ranked, and the round ends the moment somebody
+          lands the word. It starts itself, so you join and wait.
         </P>
         <P>
           A custom game is where every setting lives: mode, rounds, round length, difficulty, hints,

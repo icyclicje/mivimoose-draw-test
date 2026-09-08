@@ -12,7 +12,7 @@ const results = [];
 
 function check(label, ok, detail = '') {
   results.push({ label, ok: Boolean(ok) });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,8 +101,8 @@ async function main() {
   );
 
   /* ------------------------------------------------------- normalisation */
-  // Anything the 200k list already holds — including British spellings like
-  // "harbours" — must be ranked exactly as typed. Rewriting those is the bug
+  // Anything the 200k list already holds, including British spellings like
+  // "harbours", must be ranked exactly as typed. Rewriting those is the bug
   // that would break every word with more than one accepted spelling.
   for (const listed of ['harbours', 'leaves', 'colour', 'organise']) {
     const r = await ask(a.socket, 'game:guess', { word: listed });

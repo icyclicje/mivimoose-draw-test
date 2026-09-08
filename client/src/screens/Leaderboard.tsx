@@ -28,7 +28,7 @@ const METRIC_LABEL: Record<Metric, string> = {
 
 const METRICS = Object.keys(METRIC_LABEL) as Metric[];
 
-/* One clause each — these sit inline beside the switcher, so anything longer
+/* One clause each. These sit inline beside the switcher, so anything longer
    than a few words wraps the toolbar and pushes the table below the fold.
    They also have to be true: Elo is per-mode (the select picks the ladder),
    and the streak column is bestStreak, i.e. the longest run of wins. */
@@ -67,7 +67,7 @@ function tap() {
  *
  * The old board is deliberately left on screen while the next one loads, so
  * the layout does not collapse on every switch. That only works if the render
- * reads the loaded query rather than the selected one — otherwise picking Elo
+ * reads the loaded query rather than the selected one. Otherwise picking Elo
  * would, for the length of one request, draw tier chips off XP totals and put
  * the whole board in Lexicon.
  */
@@ -201,7 +201,7 @@ export function Leaderboard() {
 
       {/* Tier legend. Only the Elo board puts tiers on its rows, so only the
           Elo board explains them. Nine chips reading name plus entry rating
-          say it faster than a sentence would — and at the tightened padding
+          say it faster than a sentence would, and at the tightened padding
           they hold a single row inside the 880px page. */}
       {ranked && (
         <div className="row row--wrap" style={{ gap: 'var(--s1)' }}>
@@ -223,8 +223,8 @@ export function Leaderboard() {
                 }}
                 title={
                   mine
-                    ? `${tier.name}, your tier — from ${tier.minRating} elo`
-                    : `${tier.name} — from ${tier.minRating} elo`
+                    ? `${tier.name}, your tier, from ${tier.minRating} elo`
+                    : `${tier.name}, from ${tier.minRating} elo`
                 }
               >
                 <ModeIcon name={tier.icon} size={10} />
@@ -249,7 +249,7 @@ export function Leaderboard() {
           <EmptyState
             icon={<ModeIcon name="trophy" size={22} />}
             title="The board did not load"
-            hint="probably the connection."
+            hint="Check the connection and try again."
           />
           <button
             className="btn btn--sm"
@@ -330,7 +330,7 @@ export function Leaderboard() {
 
                 {/* Name, badges, title and record ride on one line: a second
                     line per row costs more height than the header and the
-                    switchers together. Both badges sit here unwrapped — they
+                    switchers together. Both badges sit here unwrapped. They
                     render nothing in the common case, and a null child costs
                     no flex gap, which a wrapper element around them would. */}
                 <div className="row grow" style={{ gap: 'var(--s2)', minWidth: 0 }}>
@@ -386,8 +386,8 @@ export function Leaderboard() {
           title={activeScope === 'guild' ? 'Nobody from this server yet' : 'Nobody on this board yet'}
           hint={
             ranked
-              ? `ratings show up after a ranked ${modeLabel(mode)} match.`
-              : 'play a match and you are on it.'
+              ? `Ratings show up after a ranked ${modeLabel(mode)} match.`
+              : 'Play a match and you are on it.'
           }
         />
       )}

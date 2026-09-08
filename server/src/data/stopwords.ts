@@ -4,7 +4,7 @@
  *
  * FUNCTION_WORDS are barred from both. They carry no meaning to guess at, and
  * their vectors sit so near the centre of the space that they rank middling
- * against almost any secret — which reads to a player as a signal and is pure
+ * against almost any secret, which reads to a player as a signal and is pure
  * noise.
  *
  * COMMON_WORDS are barred from being answers only. `time`, `people` and `thing`
@@ -80,7 +80,7 @@ export const COMMON_WORDS = new Set([
  * nothing about the answer, but it does burn a guess and clutter the board.
  *
  * The line is deliberately drawn at contentless words only. Concrete
- * descriptors — "red", "cold", "heavy", "sharp", "loud" — are real signal about
+ * descriptors ("red", "cold", "heavy", "sharp", "loud") are real signal about
  * a real property and stay guessable; blocking those would gut the game.
  */
 export const THIN_WORDS = new Set([

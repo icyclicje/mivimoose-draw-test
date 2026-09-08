@@ -62,8 +62,9 @@ export function buildRankTable(secret: string, space: VectorSpace = getVectorSpa
 
   const order = new Int32Array(depth);
   for (let i = 0; i < depth; i++) order[i] = i;
-  // Ties break on vocabulary index, which is frequency order — deterministic
-  // across restarts and slightly friendlier than an arbitrary order.
+  // Ties break on vocabulary index, which is frequency order. That is
+  // deterministic across restarts and slightly friendlier than an arbitrary
+  // order.
   const sorted = Array.from(order).sort((a, b) => scores[b] - scores[a] || a - b);
 
   const rankByIndex = new Int32Array(space.size);

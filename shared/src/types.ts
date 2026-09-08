@@ -120,6 +120,11 @@ export interface ModeDescriptor {
   minPlayers: number;
   maxPlayers: number;
   icon: string;
+  /**
+   * A CSS colour for the mode, written as a theme variable and never a literal.
+   * Three of the seven themes are light, so a pinned hex would be unreadable in
+   * some of them wherever this is rendered.
+   */
   accent: string;
   /** Settings a host may not change for this mode. */
   locked: (keyof GameSettings)[];
@@ -140,7 +145,7 @@ export interface GuessResult {
   band: RankBand;
   /**
    * Log-scaled 0..1 closeness, the same curve scoring uses. NOT the width of
-   * the bar in the UI — that is `heatFraction(rank)`, an exponential that stays
+   * the bar in the UI. That is `heatFraction(rank)`, an exponential that stays
    * near zero across the cold tail. Kept on the wire because it is the honest
    * "how far along are you" number for anything that is not a bar.
    */
@@ -150,7 +155,7 @@ export interface GuessResult {
   /**
    * Set when another player played this exact word earlier in the round.
    *
-   * You still get the rank — the word is not taken away from you — but the row
+   * You still get the rank (the word is not taken away from you), but the row
    * records that somebody beat you to it. That is the whole social mechanic of
    * a duel: burning a word your opponent already has tells you they are on the
    * same trail, and tells them you are too.
@@ -160,9 +165,9 @@ export interface GuessResult {
   repeat: boolean;
   isHint: boolean;
   /**
-   * What was typed, when it differed from the word actually ranked — "harbours"
-   * resolving to "harbor". Null when the typed word was used as-is, which is
-   * the case for anything already in the 200k list.
+   * What was typed, when it differed from the word actually ranked, such as
+   * "harbours" resolving to "harbor". Null when the typed word was used as-is,
+   * which is the case for anything already in the 200k list.
    */
   normalizedFrom: string | null;
 }
@@ -303,6 +308,14 @@ export interface RoomState {
    * While that countdown is running `deadline` is when it fires.
    */
   autoStart: boolean;
+  /**
+   * This room is today's daily word, played together.
+   *
+   * Mechanically it is a co-op room, but it is not a custom game and should not
+   * present as one: the word is today's, nobody chose the settings, and the
+   * result belongs to the daily rather than to a lobby someone spun up.
+   */
+  dailyCoop: boolean;
   /** Letters in the answer, when the room is set to reveal that. */
   secretLength: number | null;
   /** coop only. */
@@ -368,6 +381,10 @@ export interface DailyChallengeState {
   standing: number | null;
   totalSolvers: number;
   bestGuessCount: number | null;
+  /** Every guess everyone has made on today's word, solved or not. */
+  totalGuessesToday: number;
+  /** How many people have had a go at all, which is the honest denominator. */
+  totalPlayersToday: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -405,7 +422,7 @@ export interface ClientToServerEvents {
   /**
    * A co-op room playing today's daily word, so you can work it out with
    * friends instead of alone. The word is chosen server-side and never appears
-   * in the room settings — otherwise the host could read the answer off their
+   * in the room settings. Otherwise the host could read the answer off their
    * own lobby.
    */
   'room:dailyCoop': (ack: (r: Ack<{ code: string }>) => void) => void;

@@ -84,7 +84,7 @@ export function Panel({
   );
 }
 
-/** A titled group with no box around it — for pages that already have enough boxes. */
+/** A titled group with no box around it, for pages that already have enough boxes. */
 export function Section({
   title,
   action,

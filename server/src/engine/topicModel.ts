@@ -29,7 +29,7 @@ function hash32(str: string): number {
   return h >>> 0;
 }
 
-/** xorshift32 — deterministic and fast; we only need stable jitter. */
+/** xorshift32: deterministic and fast; we only need stable jitter. */
 function makeRng(seed: number) {
   let s = seed || 1;
   return () => {

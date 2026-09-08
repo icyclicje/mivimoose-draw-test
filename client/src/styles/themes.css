@@ -3,7 +3,7 @@
  *
  * Every theme redefines the same fifteen colour tokens and nothing else.
  * Spacing, radii, type and weights live in global.css and never change, so a
- * theme can never break a layout — it can only repaint one.
+ * theme can never break a layout. It can only repaint one.
  *
  * `color-scheme` matters: it is what makes native scrollbars, form controls
  * and the browser's own focus rings follow the theme instead of staying dark

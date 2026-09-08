@@ -249,8 +249,8 @@ export function Home() {
         </div>
 
         <p className="dim thin" style={{ margin: 0, fontSize: 13.5 }}>
-          Every guess comes back with a rank — how close it is to the secret word. Rank 1 is the
-          word.
+          Every guess comes back with a rank saying how close it is to the secret word. Rank 1
+          is the word.
         </p>
 
         <div className="row row--wrap" style={{ gap: 'var(--s2)' }}>
@@ -262,7 +262,7 @@ export function Home() {
             {busy === 'classic' ? <Spinner /> : <ModeIcon name="bolt" size={16} />}
             <span className="col" style={{ gap: 0, alignItems: 'flex-start', lineHeight: 1.25 }}>
               <span style={{ fontSize: 16 }}>Quick match</span>
-              {/* Same ink as the label, dropped back — a second colour on the
+              {/* Same ink as the label, dropped back. A second colour on the
                   accent fill would fail contrast in at least one theme. */}
               <span className="thin" style={{ fontSize: 12, opacity: 0.82 }}>
                 ranked · 10 players
@@ -409,8 +409,8 @@ export function Home() {
             // pushing the rest of the page off the screen.
             <div className="col" style={{ gap: 'var(--s1)', maxHeight: 152, overflowY: 'auto' }}>
               {publicRooms.map((room) => (
-                // A room that already started seats you as a spectator — the
-                // server decides that, the live chip is the heads-up.
+                // A room that already started seats you as a spectator. The
+                // server decides that, and the live chip is the heads-up.
                 <button
                   key={room.code}
                   type="button"

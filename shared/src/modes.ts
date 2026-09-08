@@ -39,7 +39,7 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     minPlayers: 1,
     maxPlayers: 10,
     icon: 'flag',
-    accent: '#7c8cff',
+    accent: 'var(--accent)',
     locked: [],
     defaults: {
       rounds: 3,
@@ -56,11 +56,11 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     name: 'Duel',
     tagline: 'Head to head, rated, one word, three minutes',
     description:
-      'One on one, and the boards stay private. A word your opponent has already burned is simply closed to you — you learn that it is taken and nothing else. Moves your Elo.',
+      'One on one, and the boards stay private. A word your opponent has already burned is simply closed to you. You learn that it is taken and nothing else. Moves your Elo.',
     minPlayers: 2,
     maxPlayers: 2,
     icon: 'swords',
-    accent: '#ff6b6b',
+    accent: 'var(--danger)',
     locked: ['maxPlayers'],
     defaults: {
       // One word, three minutes. A duel is a single decisive race, not a
@@ -83,7 +83,7 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     minPlayers: 1,
     maxPlayers: 10,
     icon: 'bolt',
-    accent: '#ffd166',
+    accent: 'var(--orange)',
     locked: [],
     defaults: { rounds: 5, roundSeconds: 60, hints: 0, endOnFirstFind: false, visibility: 'count' },
   },
@@ -96,7 +96,7 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     minPlayers: 3,
     maxPlayers: 10,
     icon: 'skull',
-    accent: '#c084fc',
+    accent: 'var(--brand)',
     locked: ['rounds'],
     defaults: { rounds: 9, roundSeconds: 120, visibility: 'best', hints: 1 },
   },
@@ -109,7 +109,7 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     minPlayers: 1,
     maxPlayers: 10,
     icon: 'route',
-    accent: '#34d399',
+    accent: 'var(--green)',
     locked: [],
     defaults: { rounds: 10, roundSeconds: 100, hints: 3, visibility: 'best' },
   },
@@ -118,11 +118,11 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     name: 'Co-op',
     tagline: 'One team, one shared guess budget',
     description:
-      'Everybody hunts the same word out of one shared pool of guesses. Boards stay private even here, so a word a teammate has already spent comes back closed — it costs the team nothing, but nobody gets to ride along on the reads somebody else paid for.',
+      'Everybody hunts the same word out of one shared pool of guesses. Boards stay private even here, so a word a teammate has already spent comes back closed. It costs the team nothing, but nobody gets to ride along on the reads somebody else paid for.',
     minPlayers: 2,
     maxPlayers: 10,
     icon: 'users',
-    accent: '#38bdf8',
+    accent: 'var(--accent)',
     locked: ['ranked'],
     defaults: {
       rounds: 3,
@@ -142,7 +142,7 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     minPlayers: 2,
     maxPlayers: 8,
     icon: 'target',
-    accent: '#fb7185',
+    accent: 'var(--pink)',
     locked: ['guessLimit'],
     defaults: {
       rounds: 3,
@@ -162,7 +162,7 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     minPlayers: 1,
     maxPlayers: 10,
     icon: 'calendar',
-    accent: '#f59e0b',
+    accent: 'var(--orange)',
     locked: ['rounds', 'roundSeconds', 'difficulty', 'ranked'],
     defaults: {
       rounds: 1,

@@ -1,5 +1,5 @@
 :root {
-  /* Colours live in themes.css — every theme redefines the same tokens.
+  /* Colours live in themes.css, where every theme redefines the same tokens.
      Everything below is invariant: a theme repaints the app, it never
      relayouts it. */
 
@@ -276,7 +276,7 @@ h3 {
 }
 
 /* A panel that is also a control. Flat like everything else, but it has to
-   answer the pointer — the mode tiles on the home screen are primary CTAs and
+   answer the pointer. The mode tiles on the home screen are primary actions and
    were pointer-inert without this. */
 .panel--interactive {
   cursor: pointer;
@@ -518,7 +518,7 @@ textarea.input {
 }
 
 /* ------------------------------------------------------------------ *
- * Guess rows — the centrepiece, matching Contexto's construction:
+ * Guess rows: the centrepiece, matching Contexto's construction.
  * a flat track, a colour bar whose width is linear in closeness, and the
  * word and rank sitting on top of both.
  * ------------------------------------------------------------------ */
@@ -562,7 +562,7 @@ textarea.input {
 }
 
 /* The guess you just played is marked by being pinned above the list, not by
-   an outline — a ring on a full-width colour bar is just noise. */
+   an outline. A ring on a full-width colour bar is just noise. */
 .guess--repeat .guess__word {
   opacity: 0.85;
 }

@@ -74,7 +74,8 @@ export interface DiscordTokenResponse {
 
 /**
  * Exchange the authorization code the embedded SDK hands us for an access
- * token. This must happen server side — the client secret never leaves here.
+ * token. This must happen server side, because the client secret never leaves
+ * here.
  */
 export class DiscordNotConfigured extends Error {
   readonly code = 'discord-disabled';

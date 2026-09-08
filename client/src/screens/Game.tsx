@@ -27,8 +27,8 @@ import { useStore } from '../lib/store';
 
 /**
  * Click sound plus the audio unlock. A match can begin before this player has
- * pressed anything at all — quickplay drops you straight onto the board — so
- * every button here has to be able to be the gesture that opens audio.
+ * pressed anything at all, because quickplay drops you straight onto the board.
+ * So every button here has to be able to be the gesture that opens audio.
  */
 function tap(): void {
   unlockAudio();
@@ -39,6 +39,31 @@ function tap(): void {
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
+
+/**
+ * Seconds per round, said the way a person would say it.
+ *
+ * The setting is stored in seconds and the common values are whole minutes, so
+ * printing it raw turns a three minute duel into "180s a round", which reads as
+ * a stopwatch reading rather than a length of time.
+ */
+function roundLength(seconds: number): string {
+  if (seconds <= 0) return 'No time limit';
+  if (seconds < 60) return `${seconds}s a round`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (rest === 0) return `${minutes} min a round`;
+  return `${minutes}m ${rest}s a round`;
+}
+
+/**
+ * How the roster animates a change of order.
+ *
+ * A spring rather than a duration: an overtake is one pill physically passing
+ * another, and it should settle rather than stop. Module level so the object is
+ * not rebuilt on every room patch, of which there are several a second.
+ */
+const ROSTER_SPRING = { type: 'spring', stiffness: 380, damping: 34 } as const;
 
 /**
  * Was this rejection somebody beating you to the word?
@@ -73,7 +98,11 @@ export function Game({ room }: { room: RoomState }) {
   const [word, setWord] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [hinting, setHinting] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Open from the start. A shut drawer with a one-line preview asks people to
+  // go and find the conversation before they can join it, and a match is short
+  // enough that almost nobody does. It still folds away for anyone who wants
+  // the board on its own.
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const [watching, setWatching] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -94,10 +123,23 @@ export function Game({ room }: { room: RoomState }) {
   );
 
   /**
+   * Which rooms get the short rules strip.
+   *
+   * Quick match is a fixed configuration nobody chose, so itemising it presents
+   * a default as though it were a decision. A duel can be hosted from a lobby,
+   * but it is two people racing for one word, and the only things that bound
+   * that race are the number of rounds, the length of one, and whether it
+   * counts. Difficulty and the rest stay true, they are just not what you are
+   * reading the board for. Every other mode is a table somebody assembled, and
+   * there the fuller list is a summary of the choices they made.
+   */
+  const simpleRules = room.autoStart || room.mode === 'duel';
+
+  /**
    * How much of a roster pill survives as the table fills.
    *
    * The distance is the number people actually compare, so it is never the
-   * thing that gets cut — the name gives way instead. The strip scrolls, but a
+   * thing that gets cut. The name gives way instead. The strip scrolls, but a
    * lobby you have to drag sideways through is worse than short names.
    */
   const rosterName: 'full' | 'first' | 'none' =
@@ -119,13 +161,27 @@ export function Game({ room }: { room: RoomState }) {
   // "your board" directly above your board.
   const showBoards = canWatch && others.length > 0;
 
+  /**
+   * Closest first, so the leader is always the leftmost pill.
+   *
+   * Score is the right order for the results screen, but mid-round it barely
+   * moves: it settles when a round ends, so a strip sorted on it sits still
+   * through the whole hunt. Best rank is the number that changes while people
+   * are guessing, and ordering on it turns an overtake into a swap you can
+   * watch happen. Players with nothing on the board yet hold the far end
+   * rather than the front, because a missing rank is not a good one.
+   */
   const standings = useMemo(
     () =>
       [...room.players].sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
         const aBest = a.bestRank ?? Infinity;
         const bBest = b.bestRank ?? Infinity;
-        return aBest - bBest;
+        if (aBest !== bBest) return aBest - bBest;
+        // Before anyone has guessed, every player ties on Infinity. The server
+        // makes no promise about player order between patches, so without a
+        // last resort of its own the strip would reshuffle itself on each one.
+        if (b.score !== a.score) return b.score - a.score;
+        return a.user.id.localeCompare(b.user.id);
       }),
     [room.players],
   );
@@ -153,10 +209,11 @@ export function Game({ room }: { room: RoomState }) {
   /**
    * One cue per phase transition.
    *
-   * Room patches arrive several times a second, so the marker — not the render
-   * — is what the sound hangs on. A ref is enough because App deliberately does
-   * not key this screen on phase: it stays mounted across countdown, playing
-   * and roundEnd, and StrictMode re-runs the effect on the same instance.
+   * Room patches arrive several times a second, so the sound hangs on the
+   * marker rather than on the render. A ref is enough because App deliberately
+   * does not key this screen on phase: it stays mounted across countdown,
+   * playing and roundEnd, and StrictMode re-runs the effect on the same
+   * instance.
    */
   const cuedPhase = useRef<string | null>(null);
   useEffect(() => {
@@ -227,12 +284,15 @@ export function Game({ room }: { room: RoomState }) {
 
   return (
     <div className="page page--board">
-      {/* ------------------------------------------------------- status */}
+      {/* ------------------------------------------------------- status
+          Two groups. On the left, the shape of the match. On the right, what is
+          happening in it at this second. */}
       <div className="statusbar">
-        <span className="chip chip--brand">{modeLabel(room.mode)}</span>
         {/* Somebody turned this on deliberately, and it is a fact about the
-            word you are hunting rather than lobby metadata — so it carries
-            weight and a colour instead of sitting with the faint text. */}
+            word you are hunting rather than lobby metadata, so it carries
+            weight and a colour instead of sitting with the faint text. It
+            survives the short strip below for the same reason: it describes the
+            answer, not the settings. */}
         {room.secretLength !== null && (
           <span
             className="mono bold"
@@ -242,19 +302,49 @@ export function Game({ room }: { room: RoomState }) {
             {room.secretLength} {room.secretLength === 1 ? 'letter' : 'letters'}
           </span>
         )}
-        {room.totalRounds > 1 && (
-          <span className="mono" style={{ fontSize: 13 }}>
-            Round {room.round}/{room.totalRounds}
-          </span>
-        )}
-        {room.settings.ranked && <span className="chip chip--accent">ranked</span>}
-        <span className="faint" style={{ fontSize: 12.5 }}>
-          {room.settings.difficulty}
-        </span>
-        {room.spectators.length > 0 && (
-          <span className="faint" style={{ fontSize: 12.5 }}>
-            {room.spectators.length} watching
-          </span>
+
+        {simpleRules ? (
+          <>
+            <span className="mono" style={{ fontSize: 13 }}>
+              {room.totalRounds > 1 ? `Round ${room.round}/${room.totalRounds}` : 'One round'}
+            </span>
+            <span className="mono" style={{ fontSize: 13 }}>
+              {roundLength(room.settings.roundSeconds)}
+            </span>
+            {/* Stated either way. Whether this one moves your rating is a
+                question with two answers, and printing only the yes leaves the
+                no to be inferred from an absence. */}
+            {room.settings.ranked ? (
+              <span className="chip chip--accent">ranked</span>
+            ) : (
+              <span className="faint" style={{ fontSize: 12.5 }}>
+                casual
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Today's daily played together is a co-op room mechanically, but
+                it is not a game anybody set up, and this chip is the only place
+                that difference is visible from the board. */}
+            <span className="chip chip--brand">
+              {room.dailyCoop ? 'Daily co-op' : modeLabel(room.mode)}
+            </span>
+            {room.totalRounds > 1 && (
+              <span className="mono" style={{ fontSize: 13 }}>
+                Round {room.round}/{room.totalRounds}
+              </span>
+            )}
+            {room.settings.ranked && <span className="chip chip--accent">ranked</span>}
+            <span className="faint" style={{ fontSize: 12.5 }}>
+              {room.settings.difficulty}
+            </span>
+            {room.spectators.length > 0 && (
+              <span className="faint" style={{ fontSize: 12.5 }}>
+                {room.spectators.length} watching
+              </span>
+            )}
+          </>
         )}
 
         <span className="grow" />
@@ -288,16 +378,25 @@ export function Game({ room }: { room: RoomState }) {
           // wherever it appears.
           const heat = player.bestRank !== null ? bandColor(bandForRank(player.bestRank)) : undefined;
           return (
-            <div
+            <motion.div
+              // The id, never the index. A pill has to stay the same element
+              // across a reorder or there is nothing left for the animation to
+              // move: React would rewrite the text in place instead.
               key={player.user.id}
+              // Position only. A pill also changes width as its rank goes from
+              // "no guesses" to "8,002 away", and animating that alongside the
+              // move stretches the text mid-flight. The order is the part worth
+              // watching, so the order is the only part that animates.
+              layout="position"
+              transition={ROSTER_SPRING}
               className={cx(
                 'roster__item',
                 player.user.id === user?.id && 'roster__item--me',
                 room.activePlayerId === player.user.id && 'roster__item--active',
                 out && 'roster__item--out',
               )}
-              // Carries the whole name, which is what the pill drops first —
-              // on a busy strip the avatar plus this is how you identify a row.
+              // Carries the whole name, which is what the pill drops first. On a
+              // busy strip the avatar plus this is how you identify a row.
               title={`${player.user.displayName} · ${formatAway(player.bestRank)} · ${player.score.toLocaleString()} pts · ${player.guessCount} guesses${
                 player.strikes > 0 ? ` · ${player.strikes} strikes` : ''
               }`}
@@ -311,19 +410,19 @@ export function Game({ room }: { room: RoomState }) {
                 </span>
               )}
               {/* Strikes only exist in sudden death, and there they are the
-                  thing you watch — worth the extra glyphs on the pill. */}
+                  thing you watch, which earns them the extra glyphs. */}
               {player.strikes > 0 && (
                 <span style={{ color: 'var(--pink)', fontSize: 11, flex: 'none' }}>
                   {'✕'.repeat(player.strikes)}
                 </span>
               )}
               {/* "8,002 away" reads as a gap you are closing where a bare
-                  number reads as nothing — and half of it reads as neither, so
+                  number reads as nothing, and half of it reads as neither, so
                   it is never truncated. Room is made by shortening the name. */}
               <span className="roster__rank" style={{ color: heat, flex: 'none' }}>
                 {formatAway(player.bestRank)}
               </span>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -331,7 +430,7 @@ export function Game({ room }: { room: RoomState }) {
       {/* Word box, commentary and board are one block rather than three page
           rows. StatusOverlay reserves its height so the list never jumps as
           lines come and go, and at page spacing that reserved band reads as a
-          hole whenever nobody is doing anything — hence the tighter gaps. */}
+          hole whenever nobody is doing anything, hence the tighter gaps. */}
       <div className="col" style={{ gap: 'var(--s1)', minWidth: 0 }}>
         {/* The word box. Deliberately the loudest thing on the page. */}
         <form onSubmit={submit} className="col" style={{ gap: 'var(--s2)' }}>
@@ -343,7 +442,7 @@ export function Game({ room }: { room: RoomState }) {
                 isSpectator
                   ? 'you are spectating'
                   : me?.status === 'found'
-                    ? 'you found it — watch the others'
+                    ? 'you found it, watch the others'
                     : me?.status === 'eliminated'
                       ? 'you are out this round'
                       : !myTurn
@@ -399,9 +498,9 @@ export function Game({ room }: { room: RoomState }) {
                 // The list keeps one form of a word and ranks that one, so a
                 // plural or a British spelling still scores. Naming the word
                 // that was actually used is how people learn the list is
-                // forgiving — it is information, not a correction, so it shares
-                // the rejection's slot but not its colour, and it fades in
-                // rather than nudging the way an error does.
+                // forgiving. It is information rather than a correction, so it
+                // shares the rejection's slot but not its colour, and it fades
+                // in rather than nudging the way an error does.
                 <motion.span
                   key={latestGuess.id}
                   initial={{ opacity: 0 }}
@@ -426,7 +525,8 @@ export function Game({ room }: { room: RoomState }) {
             )}
 
             {/* The hint count rides on its own button rather than being repeated
-                in the status bar — it only means anything where you spend it. */}
+                in the status bar, because it only means anything where you
+                spend it. */}
             {room.settings.hints > 0 && me && (
               <button
                 type="button"
@@ -457,7 +557,7 @@ export function Game({ room }: { room: RoomState }) {
           </div>
         </form>
 
-        {/* Server commentary — who just took the lead, who is closing in. It
+        {/* Server commentary: who just took the lead, who is closing in. It
             sits on the path your eye already takes from the word box to the
             board. */}
         <StatusOverlay />
@@ -520,7 +620,7 @@ export function Game({ room }: { room: RoomState }) {
 
           {/* Whose list this is. A highlighted tab above a column of words is
               easy to read straight past, and then somebody else's guesses look
-              like your own — so the owner is named here, with the two numbers
+              like your own, so the owner is named here with the two numbers
               that say how their round is going. minHeight keeps the line the
               same height on both boards so switching does not shift the list. */}
           {showBoards && (
@@ -583,7 +683,7 @@ export function Game({ room }: { room: RoomState }) {
               watched
                 ? `${watched.user.displayName} has not guessed yet`
                 : isSpectator
-                  ? 'watching along — the board fills as they guess'
+                  ? 'watching along, the board fills as they guess'
                   : 'start broad. music, ocean, money. then follow the heat.'
             }
           />
@@ -591,8 +691,9 @@ export function Game({ room }: { room: RoomState }) {
       </div>
 
       {/* ------------------------------------------------------- drawer
-          Feed, chat and emotes stay shut until asked for, so nothing moves
-          beside the board while you are guessing. */}
+          Feed, chat and emotes, open from the start. A match is short, and a
+          conversation you have to go looking for never gets started. The toggle
+          stays for anyone who wants the board on its own. */}
       <div className="drawer">
         <button
           type="button"
@@ -625,7 +726,8 @@ export function Game({ room }: { room: RoomState }) {
           // Chat scrolls its own log and keeps the composer pinned, so the
           // drawer gives it a fixed box to divide up rather than scrolling as
           // well. Two nested scrollers would drag the message field out of
-          // reach mid-conversation.
+          // reach mid-conversation. The 260 is load bearing: Chat caps its log
+          // against exactly this height.
           <div
             className="drawer__body"
             style={{ display: 'flex', flexDirection: 'column', height: 260, overflow: 'hidden' }}
@@ -647,10 +749,16 @@ export function Game({ room }: { room: RoomState }) {
         Leave match
       </button>
 
+      {/* Both branches are keyed. AnimatePresence tracks its children by key,
+          and two unkeyed siblings both read as the same empty key, so a room
+          that went straight from the countdown to a reveal would swap one for
+          the other with no fade at either end. */}
       <AnimatePresence>
-        {room.phase === 'countdown' && <CountdownOverlay remaining={remaining} />}
+        {room.phase === 'countdown' && (
+          <CountdownOverlay key="countdown" remaining={remaining} />
+        )}
         {room.phase === 'roundEnd' && room.lastRound && (
-          <RoundReveal summary={room.lastRound} remaining={remaining} />
+          <RoundReveal key="roundEnd" summary={room.lastRound} remaining={remaining} />
         )}
       </AnimatePresence>
     </div>
@@ -658,7 +766,7 @@ export function Game({ room }: { room: RoomState }) {
 }
 
 /* ------------------------------------------------------------------ *
- * Overlays — one flat scrim, no blur, no glow.
+ * Overlays. One flat scrim, no blur, no glow.
  * ------------------------------------------------------------------ */
 
 const SCRIM = 'var(--scrim)';

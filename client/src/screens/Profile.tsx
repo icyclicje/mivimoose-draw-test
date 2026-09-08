@@ -42,7 +42,7 @@ type FriendsView =
 
 /* Every list here is capped and scrolls inside itself. The screen has to land
    inside a 680px-tall Activity frame, and match history, friends and
-   achievements are all server-driven and open-ended — any one of them would
+   achievements are all server-driven and open-ended, so any one of them would
    otherwise push the rest off the bottom. */
 const RECENT_BOX = { maxHeight: 168, overflowY: 'auto' as const };
 const FRIENDS_CAP = 6;
@@ -144,7 +144,7 @@ export function Profile() {
       <div className="page">
         <EmptyState title="Could not load your profile" hint={error} />
         {/* The failure is usually a dropped connection, so the screen needs a
-            way back in — otherwise switching tabs is the only retry. */}
+            way back in. Otherwise switching tabs is the only retry. */}
         <div className="row" style={{ justifyContent: 'center' }}>
           <button className="btn btn--sm" onClick={retry}>
             Try again
@@ -240,7 +240,7 @@ export function Profile() {
         <Stat label="Words found" value={stats.wordsFound.toLocaleString()} />
         <Stat
           label="Avg guesses"
-          value={stats.averageGuesses ? stats.averageGuesses.toFixed(1) : '—'}
+          value={stats.averageGuesses ? stats.averageGuesses.toFixed(1) : 'none yet'}
         />
         <Stat label="Fastest find" value={formatDuration(stats.fastestFindMs)} />
         <Stat
@@ -348,7 +348,7 @@ export function Profile() {
                     title={friend.activity ?? (friend.online ? 'Online' : 'Offline')}
                     style={{ gap: 'var(--s2)', minWidth: 0 }}
                   >
-                    {/* The ring is the whole online indicator — a separate dot
+                    {/* The ring is the whole online indicator. A separate dot
                         at this size is one more thing to align and read. */}
                     <Avatar
                       user={friend.user}
@@ -396,7 +396,7 @@ export function Profile() {
             const tip =
               unlockedAt === null
                 ? achievement.description
-                : `${achievement.description} — got it ${relativeTime(unlockedAt)}`;
+                : `${achievement.description} (got it ${relativeTime(unlockedAt)})`;
             return (
               <div
                 key={achievement.id}
@@ -457,8 +457,8 @@ function ReplayBody({ replay, meId }: { replay: MatchReplay; meId: string }) {
   const mine = replay.paths.filter((p) => p.user.id === meId);
   const me = replay.players.find((p) => p.user.id === meId);
 
-  /* A match can be stored with its summary but no rounds — abandoned in the
-     lobby, or trimmed by a retention pass. Without this the modal opens on
+  /* A match can be stored with its summary but no rounds, either abandoned in
+     the lobby or trimmed by a retention pass. Without this the modal opens on
      nothing at all. */
   if (replay.rounds.length === 0) {
     return <EmptyState title="Nothing recorded" hint="This match has no rounds saved." />;
@@ -516,7 +516,7 @@ function ReplayBody({ replay, meId }: { replay: MatchReplay; meId: string }) {
  * The route, in the order it was played.
  *
  * Deliberately NOT sorted by rank. Sorted, this is a scoreboard; in play order
- * it is the actual path — the wrong turns included, plus where a hint reset the
+ * it is the actual path, wrong turns included, plus where a hint reset the
  * search and how long each leg took.
  */
 function PathSteps({ path }: { path: GuessPath }) {

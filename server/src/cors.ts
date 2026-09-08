@@ -28,8 +28,8 @@ export function isOriginAllowed(origin: string, host?: string): boolean {
 
 /**
  * Shared by the HTTP app and the socket server so both answer the same way.
- * A blocked origin gets a response without CORS headers — which is what the
- * browser needs to see — rather than a 500 from the error handler.
+ * A blocked origin gets a response without CORS headers, which is what the
+ * browser needs to see, rather than a 500 from the error handler.
  */
 export const corsDelegate: CorsOptionsDelegate<CorsRequest> = (req, callback) => {
   const origin = req.headers.origin;

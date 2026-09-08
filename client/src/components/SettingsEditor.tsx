@@ -27,7 +27,7 @@ const VISIBILITY_HINT: Record<Visibility, string> = {
   full: 'their rank on every guess',
 };
 
-/** A titled run of fields. No border — the editor already sits inside a panel. */
+/** A titled run of fields. No border, since the editor already sits inside a panel. */
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="col" style={{ gap: 'var(--s2)' }}>
@@ -125,7 +125,7 @@ export function SettingsEditor({
     <div className="col" style={{ gap: 'var(--s5)' }}>
       {showModePicker && (
         <Group title="Mode">
-          {/* One line per mode — the tagline only repeats the blurb underneath.
+          {/* One line per mode. The tagline only repeats the blurb underneath.
               Daily is not host-configurable, so it is not offered here. */}
           <div
             className="grid"
@@ -232,7 +232,7 @@ export function SettingsEditor({
           </Field>
 
           {/* The two mode-specific numbers stay on screen in every mode, inert
-              where they do not apply — hiding them read as settings going missing. */}
+              where they do not apply. Hiding them read as settings going missing. */}
           <Field label="Strikes" hint="sudden death only">
             <Stepper
               value={settings.strikes}
@@ -297,7 +297,7 @@ export function SettingsEditor({
           {/* The two word rules change what a round actually is, so each needs a
               whole sentence to explain. In the 196px cells below those sentences
               run to four lines and stretch every short-hint toggle sharing the
-              grid row to match — and a seventh tile turns a tidy two-row grid
+              grid row to match, and a seventh tile turns a tidy two-row grid
               into three. A wider pair of cells keeps both hints readable and
               leaves the grid beneath at six. */}
           <div
@@ -450,27 +450,94 @@ export function SettingsEditor({
   );
 }
 
-export function SettingsSummary({ settings }: { settings: GameSettings }) {
-  const bits = [
-    `${settings.rounds} ${settings.rounds === 1 ? 'word' : 'words'}`,
-    settings.roundSeconds ? `${formatClock(settings.roundSeconds * 1000)} each` : 'untimed',
-    `up to ${settings.maxPlayers}`,
-    settings.difficulty,
-    settings.category !== 'any' ? settings.category : null,
-    settings.guessLimit ? `${settings.guessLimit} guess cap` : null,
-    settings.hints ? `${settings.hints} hints` : 'no hints',
-    settings.lockClaimedWords ? 'closed words' : null,
-    settings.showWordLength ? 'letter count' : null,
-    settings.customWords ? 'custom words' : null,
-    settings.seed ? `seed ${settings.seed}` : null,
-  ].filter(Boolean);
+type Fact = { label: string; value: string; accent?: boolean; wrap?: boolean };
+
+/**
+ * One labelled box.
+ *
+ * Values are held to a single line by default: the grid is scanned down its
+ * labels, and a value that wraps drags its whole row out of step. A seed is
+ * the exception, since every character of it has to be readable to be reused.
+ * It wraps and sets smaller instead of being cut off inside a 104px cell.
+ */
+function Metric({ label, value, accent, wrap }: Fact) {
+  return (
+    <div className="col" style={{ gap: 1, minWidth: 0 }}>
+      <span className="metric__label">{label}</span>
+      <span
+        className={wrap ? 'metric__value' : 'metric__value truncate'}
+        // A tooltip is only worth having where the text can actually be cut off.
+        title={wrap ? undefined : value}
+        style={{
+          // The stats screens run this at 19px. Here it shares a lobby panel
+          // with the roster and the chat, so it is stepped down to keep them
+          // all on one screen.
+          fontSize: wrap ? 13 : 15,
+          lineHeight: wrap ? 1.3 : undefined,
+          overflowWrap: wrap ? 'anywhere' : undefined,
+          color: accent ? 'var(--accent)' : undefined,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The rules of the match as labelled boxes.
+ *
+ * A run of chips reads as one long sentence you have to take in whole. People
+ * come here with a single question ("how long is a round?"), and only a label
+ * beside each value answers it without reading the rest.
+ *
+ * `compact` is for quick match and duels. Nobody chose those settings, so
+ * itemising every rule implies a decision that was never made; the four facts
+ * that shape how the match feels are enough.
+ */
+export function SettingsSummary({
+  settings,
+  compact = false,
+}: {
+  settings: GameSettings;
+  compact?: boolean;
+}) {
+  const core: Fact[] = [
+    { label: 'Rounds', value: `${settings.rounds} ${settings.rounds === 1 ? 'word' : 'words'}` },
+    {
+      label: 'Time',
+      value: settings.roundSeconds ? `${formatClock(settings.roundSeconds * 1000)} each` : 'untimed',
+    },
+    { label: 'Players', value: `up to ${settings.maxPlayers}` },
+  ];
+
+  // A setting that is off gets no box at all rather than a "0" or a "no": every
+  // box is a rule you are being asked to hold in mind, and an absent rule is
+  // not one of them. Ranked is the exception in compact, where the four boxes
+  // are fixed and "no" is the answer to a question people do ask.
+  const rest: (Fact | null)[] = compact
+    ? [{ label: 'Ranked', value: settings.ranked ? 'yes' : 'no', accent: settings.ranked }]
+    : [
+        settings.ranked ? { label: 'Ranked', value: 'yes', accent: true } : null,
+        { label: 'Difficulty', value: settings.difficulty },
+        settings.category !== 'any' ? { label: 'Category', value: settings.category } : null,
+        settings.guessLimit ? { label: 'Guesses', value: `${settings.guessLimit} max` } : null,
+        settings.hints ? { label: 'Hints', value: `${settings.hints} per round` } : null,
+        settings.lockClaimedWords ? { label: 'Words', value: 'closed' } : null,
+        settings.showWordLength ? { label: 'Letters', value: 'shown' } : null,
+        settings.customWords
+          ? { label: 'Word list', value: `${settings.customWords.length} words` }
+          : null,
+        settings.seed ? { label: 'Seed', value: settings.seed, wrap: true } : null,
+      ];
+
+  const facts = [...core, ...rest].filter((f): f is Fact => f !== null);
 
   return (
-    <div className="row row--wrap">
-      {settings.ranked && <span className="chip chip--accent">Ranked</span>}
-      <span className="dim thin" style={{ fontSize: 13 }}>
-        {bits.join(' · ')}
-      </span>
+    <div className="metrics">
+      {facts.map((fact) => (
+        <Metric key={fact.label} {...fact} />
+      ))}
     </div>
   );
 }

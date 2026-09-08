@@ -110,7 +110,7 @@ const GUEST_NOUNS = [
 /**
  * Creates a throwaway account. Every guest is a real row with a real id, so a
  * guest can host rooms, hold a socket session and reconnect mid-match exactly
- * like a Discord player — they are simply flagged and kept off the ladders.
+ * like a Discord player. They are simply flagged and kept off the ladders.
  */
 export async function createGuestUser(requestedName?: string) {
   const suffix = Math.random().toString(36).slice(2, 8);

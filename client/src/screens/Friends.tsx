@@ -144,7 +144,7 @@ export function Friends() {
   const [list, setList] = useState<FriendList | null>(null);
   const [error, setError] = useState<string | null>(null);
   /* Friend changes go over HTTP, and the server only pushes friends:changed on
-     presence moves — so our own accept, add or remove has to ask for the list
+     presence moves, so our own accept, add or remove has to ask for the list
      again itself rather than waiting for a bump that never comes. */
   const [reload, setReload] = useState(0);
 

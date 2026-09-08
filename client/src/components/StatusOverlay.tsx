@@ -36,6 +36,8 @@ export function StatusOverlay() {
         alignItems: 'center',
         // Holds its height so the board does not jump as lines come and go.
         minHeight: 26,
+        maxWidth: '100%',
+        minWidth: 0,
         pointerEvents: 'none',
       }}
     >
@@ -56,7 +58,13 @@ export function StatusOverlay() {
                 fontWeight: 'var(--w-bold)',
                 color: tone.color,
                 background: tone.background,
+                // These name people ("Ada is now in the lead"), so a long
+                // display name would otherwise widen the page rather than the
+                // pill. One line still, just clipped at the board's width.
                 whiteSpace: 'nowrap',
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
               {message.text}

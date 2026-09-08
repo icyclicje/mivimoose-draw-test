@@ -14,9 +14,9 @@ export function Boot() {
   const [name, setName] = useState('');
 
   // Inside Discord with a configured app, the Activity handshake runs on its
-  // own. Everywhere else — a plain browser tab, or a deployment with no Discord
-  // credentials at all — guest sign-in is the way in, including from inside the
-  // Discord iframe.
+  // own. Everywhere else, guest sign-in is the way in. That covers a plain
+  // browser tab, a deployment with no Discord credentials at all, and the
+  // Discord iframe itself.
   const discordEnabled = config?.discordEnabled ?? false;
   const showGuest = (!isEmbedded || !discordEnabled) && (status === 'auth' || status === 'error');
 

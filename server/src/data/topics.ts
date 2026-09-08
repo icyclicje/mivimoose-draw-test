@@ -7,8 +7,8 @@
  * the game is playable the moment you clone it.
  *
  * Each entry is a topic: a bag of words that co-occur in the same contexts.
- * Words deliberately appear in several topics — "bank" sits in both finance and
- * rivers, "star" in both astronomy and celebrity — and that overlap is what
+ * Words deliberately appear in several topics: "bank" sits in both finance and
+ * rivers, "star" in both astronomy and celebrity. That overlap is what
  * gives the derived vectors their structure. The builder in `topicModel.ts`
  * turns membership into vectors and then smooths them so two topics that share
  * vocabulary end up genuinely near each other rather than orthogonal.

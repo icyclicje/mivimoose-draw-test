@@ -36,7 +36,7 @@ const STEPS = [1, 2, 2.5, 5, 10];
  *
  * The gridlines are labelled with their values, so a raw max of 37 would put
  * "9.25" on a line. Rounding the ceiling up to the next nice step keeps every
- * label an integer — hence the isInteger guard, which is what stops 2.5 from
+ * label an integer. That is what the isInteger guard is for: it stops 2.5 from
  * being picked at the small end where it would label a line "2.5 players".
  */
 function scaleTop(rawMax: number): number {

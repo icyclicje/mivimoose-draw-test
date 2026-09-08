@@ -40,8 +40,8 @@ export interface GameInvite {
 /**
  * The exact route one player took to a word, in the order they played it.
  *
- * This is the interesting artefact of a finished game — far more than the
- * final score — so it is a first-class thing you can open from the results
+ * This is the interesting artefact of a finished game, far more than the
+ * final score, so it is a first-class thing you can open from the results
  * screen or from someone's profile.
  */
 export interface GuessPath {
@@ -81,7 +81,7 @@ export interface MatchReplay {
  * ------------------------------------------------------------------ */
 
 /**
- * Short, transient lines the client surfaces over the board — "Ash is 12 away",
+ * Short, transient lines the client surfaces over the board: "Ash is 12 away",
  * "you are getting warmer", "Wren found it". They are derived from game events
  * rather than stored, and they exist to make a quiet multiplayer round feel
  * like something is happening.

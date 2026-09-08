@@ -3,26 +3,28 @@ import type { RankBand } from './types.js';
 /**
  * The heat scale, matching Contexto's: three bands, not a gradient.
  *
- * Thresholds are its own — green up to 300, orange up to 1500, pink beyond.
+ * Thresholds are its own: green up to 300, orange up to 1500, pink beyond.
  * Players who know that game read these instantly.
  *
  * `color` is a CSS variable rather than a hex value so the bands follow the
  * active theme. Seven themes ship, three of them light and one deliberately
- * hueless, and a bar pinned to one fixed green would fight all of them. The
- * fallback in each var() is Contexto's own colour, so anything rendering these
- * outside the app's stylesheet still gets the right hue.
+ * hueless, and a bar pinned to one fixed green would fight all of them.
+ *
+ * The value is the bare variable with no literal fallback, because a hex
+ * fallback would be a dark-theme colour sitting in wait for the three light
+ * themes. The tokens are defined globally, so there is nothing to fall back to.
  */
 export const BAND_THRESHOLDS: { band: RankBand; max: number; label: string; color: string }[] = [
-  { band: 'found', max: 1, label: 'Found it', color: 'var(--band-hot, #00ba7c)' },
-  { band: 'hot', max: 300, label: 'Hot', color: 'var(--band-hot, #00ba7c)' },
-  { band: 'warm', max: 1500, label: 'Warm', color: 'var(--band-warm, #ef7d31)' },
-  { band: 'cool', max: 15000, label: 'Cold', color: 'var(--band-cold, #f91880)' },
-  { band: 'cold', max: 60000, label: 'Freezing', color: 'var(--band-cold, #f91880)' },
+  { band: 'found', max: 1, label: 'Found it', color: 'var(--band-hot)' },
+  { band: 'hot', max: 300, label: 'Hot', color: 'var(--band-hot)' },
+  { band: 'warm', max: 1500, label: 'Warm', color: 'var(--band-warm)' },
+  { band: 'cool', max: 15000, label: 'Cold', color: 'var(--band-cold)' },
+  { band: 'cold', max: 60000, label: 'Freezing', color: 'var(--band-cold)' },
   {
     band: 'frozen',
     max: Number.POSITIVE_INFINITY,
     label: 'Nowhere near',
-    color: 'var(--band-cold, #f91880)',
+    color: 'var(--band-cold)',
   },
 ];
 
@@ -41,7 +43,7 @@ export function bandMeta(band: RankBand) {
  * Measured off contexto.me rather than guessed at: sampling its rendered bars
  * against their ranks gives width = exp(-rank / 800) with a 1% floor, and the
  * fitted constant came out at 800.3 across every sampled point. An exponential
- * is the right shape for this — it keeps the bar essentially empty across the
+ * is the right shape for this. It keeps the bar essentially empty across the
  * whole cold tail and only starts moving when you are genuinely close, which is
  * exactly the feedback the game wants to give.
  *

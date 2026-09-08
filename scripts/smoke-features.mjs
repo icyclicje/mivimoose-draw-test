@@ -12,7 +12,7 @@ const BASE = process.env.MIVIMOOSE_URL ?? 'http://localhost:3001';
 const results = [];
 function check(label, ok, detail = '') {
   results.push({ label, ok: Boolean(ok) });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -120,7 +120,7 @@ async function main() {
   );
 
   // Classic closes claimed words, so another player hitting the same word is
-  // refused rather than ranked — and told whose it was. That distinction is the
+  // refused rather than ranked, and told whose it was. That distinction is the
   // point: your own replay is free, theirs is a closed door.
   const steal = await ask(bSock, 'game:guess', { word: 'anchor' });
   check(

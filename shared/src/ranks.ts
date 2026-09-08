@@ -2,7 +2,7 @@
  * Competitive tiers.
  *
  * Elo on its own is a number nobody feels anything about. A tier gives it a
- * name, a colour and a shape, and — more usefully — tells you how far you are
+ * name, a colour and a shape, and (more usefully) tells you how far you are
  * from the next one, which is the thing that actually pulls people back.
  *
  * Bands are deliberately uneven: narrow at the bottom so new players move

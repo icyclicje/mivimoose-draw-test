@@ -122,11 +122,13 @@ export class Room {
    * Every word played this round, mapped to whoever played it first.
    *
    * A claimed word is NOT closed off. You may still play it and you still get
-   * its rank — the row simply records that somebody beat you to it. Blocking
+   * its rank. The row simply records that somebody beat you to it. Blocking
    * the word instead would hide the one thing the mechanic exists to show:
    * that two people are working the same trail.
    */
   claimed = new Map<string, { playerId: string; displayName: string; rank: number }>();
+  /** Who currently holds the best rank this round, for lead-change messages. */
+  leaderId: string | null = null;
   feed: FeedEntry[] = [];
   rounds: RoundSummary[] = [];
   result: MatchResult | null = null;
@@ -139,6 +141,9 @@ export class Room {
    * on the room object and never leaves the server.
    */
   forcedSecrets: string[] | null = null;
+
+  /** Set for the "play the daily with friends" room. Purely presentational. */
+  isDailyCoop = false;
 
   /** Flat guess log for the whole match, kept for persistence and replays. */
   matchGuessLog: {
@@ -153,7 +158,7 @@ export class Room {
 
   /**
    * Quick-match lobbies. Nobody owns the settings and nobody has to press
-   * start — the room fills and goes on its own.
+   * start. The room fills and goes on its own.
    */
   managed = false;
   autoStartAt: number | null = null;
@@ -486,7 +491,7 @@ export class Room {
     this.clearAutoStart();
     this.phase = 'countdown';
     this.deadline = Date.now() + COUNTDOWN_MS;
-    this.pushFeed({ kind: 'system', text: `${MODES[settings.mode].name} starting — ${totalRounds} ${totalRounds === 1 ? 'word' : 'words'}` });
+    this.pushFeed({ kind: 'system', text: `${MODES[settings.mode].name} starting with ${totalRounds} ${totalRounds === 1 ? 'word' : 'words'}` });
     this.bus.sync(this);
 
     precomputeRankTable(this.secrets[0]);
@@ -506,6 +511,7 @@ export class Room {
     this.phase = 'playing';
     this.roundStartedAt = Date.now();
     this.claimed.clear();
+    this.leaderId = null;
     this.teamGuessesLeft = this.settings.mode === 'coop' ? this.settings.teamGuessBudget : null;
 
     for (const player of this.players.values()) {
@@ -553,7 +559,7 @@ export class Room {
           kind: 'system',
           playerId: player.user.id,
           displayName: player.user.displayName,
-          text: `${player.user.displayName} ran out of time — strike ${player.strikes}/${this.settings.strikes}`,
+          text: `${player.user.displayName} ran out of time (strike ${player.strikes}/${this.settings.strikes})`,
         });
         if (player.strikes >= this.settings.strikes) this.strikeOut(player);
       }
@@ -638,13 +644,13 @@ export class Room {
 
     // Replaying a word you already tried is not an error, it is a memory lapse.
     // Hand the original row straight back so the board re-pins it and says
-    // "already guessed" — no guess spent, no budget spent, no scolding. Your
+    // "already guessed". No guess spent, no budget spent, no scolding. Your
     // own rank is yours already, so showing it again reveals nothing.
     const previous = player.guesses.find((g) => g.word === resolved.word);
     if (previous) return { ...previous, repeat: true };
 
     // Somebody else got there first, and this room closes claimed words. You
-    // are told who took it and nothing else — the rank stays theirs, which is
+    // are told who took it and nothing else. The rank stays theirs, which is
     // what makes being second to a word actually cost something. No guess is
     // charged: a word you are not allowed to play is not a turn you took.
     const heldBy = this.claimed.get(resolved.word);
@@ -677,6 +683,10 @@ export class Room {
 
     player.hintsLeft -= 1;
     player.hintsUsed += 1;
+    // Announced to the room, and deliberately NOT run through
+    // announceProgress: a hint is the game handing you a closer word, so
+    // reporting it as your own good guess would be a lie.
+    this.emitStatus(`${player.user.displayName} used a hint`, 'neutral', 4, 3000);
     const result = this.applyGuess(player, suggestion.word, suggestion.rank, true);
     this.pushFeed({
       kind: 'hint',
@@ -731,11 +741,10 @@ export class Room {
       });
     }
 
-    const previousBest = player.bestRank;
     const improved = player.bestRank === null || rank < player.bestRank;
     if (improved) player.bestRank = rank;
 
-    if (!isHint) this.announceProgress(player, rank, previousBest, improved);
+    if (!isHint) this.announceProgress(player, rank, improved);
 
     // Sudden death: a guess that fails to beat the board costs you a strike.
     if (isTurnBased(this.settings.mode) && !isHint) {
@@ -749,7 +758,7 @@ export class Room {
           kind: 'system',
           playerId: player.user.id,
           displayName: player.user.displayName,
-          text: `${player.user.displayName} failed to beat rank ${boardBest} — strike ${player.strikes}/${this.settings.strikes}`,
+          text: `${player.user.displayName} failed to beat rank ${boardBest} (strike ${player.strikes}/${this.settings.strikes})`,
         });
         if (player.strikes >= this.settings.strikes) this.strikeOut(player);
       }
@@ -930,7 +939,8 @@ export class Room {
           word: guess.word,
           rank: guess.rank,
           // Kept so a replay can show which words were already claimed when
-          // they were played — the interesting part of two people racing.
+          // they were played, which is the interesting part of two people
+          // racing.
           stolen: guess.stolenFrom !== null,
           isHint: guess.isHint,
           msIntoRound: guess.at,
@@ -1059,7 +1069,7 @@ export class Room {
       this.spectators.delete(id);
       this.join(user, 'rejoin', false);
     }
-    this.pushFeed({ kind: 'system', text: 'Rematch — back to the lobby' });
+    this.pushFeed({ kind: 'system', text: 'Rematch: back to the lobby' });
     this.evaluateAutoStart();
     this.bus.sync(this);
     return { ok: true };
@@ -1112,54 +1122,49 @@ export class Room {
    *
    * Two audiences with different rules. You always hear about your own guess,
    * because it is your feedback loop. Everyone else only hears about it when it
-   * is genuinely notable AND the room's visibility setting allows it — a
+   * is genuinely notable AND the room's visibility setting allows it. A
    * "hidden" room would otherwise leak exactly what it is meant to hide.
    *
    * Thresholds rather than every guess: a line per guess in a ten-player room
    * is noise, and noise is what people learn to ignore.
    */
-  private announceProgress(
-    player: PlayerState,
-    rank: number,
-    previousBest: number | null,
-    improved: boolean,
-  ): void {
+  private announceProgress(player: PlayerState, rank: number, improved: boolean): void {
     const name = player.user.displayName;
     const away = rank.toLocaleString();
+
+    /**
+     * Green is the only band worth interrupting for.
+     *
+     * Everything colder used to get a line too, which meant a status was
+     * showing almost permanently and people stopped reading them. A message
+     * that fires constantly carries no information. Anything above 300 now
+     * passes in silence, and the heat bar says it instead.
+     */
+    const GREEN = 300;
+
+    if (rank > GREEN) {
+      player.greenStreak = 0;
+      return;
+    }
 
     // Yours.
     if (improved) {
       if (rank <= 10) {
-        this.emitStatusTo(player.user.id, `${away} away — it is right there`, 'great', 5, 3600);
+        this.emitStatusTo(player.user.id, `${away} away, it is right there`, 'great', 5, 3600);
       } else if (rank <= 100) {
-        this.emitStatusTo(player.user.id, `${away} away — very warm`, 'great', 4);
-      } else if (rank <= 500) {
-        this.emitStatusTo(player.user.id, `${away} away — getting warm`, 'good', 3);
-      } else if (previousBest !== null && previousBest / rank >= 4) {
-        // A big jump is worth calling out even when the rank is still cold.
-        this.emitStatusTo(player.user.id, `big jump — ${away} away now`, 'good', 3);
+        this.emitStatusTo(player.user.id, `${away} away, very warm`, 'great', 4);
+      } else {
+        this.emitStatusTo(player.user.id, `${away} away, getting warm`, 'good', 3);
       }
     }
 
-    // A run of genuinely warm guesses is worth calling out on its own: it means
-    // they have found the right neighbourhood, which is the moment a round
-    // stops being random and starts being a race.
-    const GREEN = 300;
-    if (rank <= GREEN) {
-      player.greenStreak += 1;
-      if (player.greenStreak === 3) {
-        this.emitStatusTo(player.user.id, 'three green in a row — you are on it', 'great', 6, 3800);
-      } else if (player.greenStreak >= 5 && player.greenStreak % 2 === 1) {
-        this.emitStatusTo(
-          player.user.id,
-          `${player.greenStreak} green in a row`,
-          'great',
-          6,
-          3400,
-        );
-      }
-    } else {
-      player.greenStreak = 0;
+    // A run of green means they have found the right neighbourhood, which is
+    // the moment a round stops being random and starts being a race.
+    player.greenStreak += 1;
+    if (player.greenStreak === 3) {
+      this.emitStatusTo(player.user.id, 'three green in a row, you are on it', 'great', 6, 3800);
+    } else if (player.greenStreak >= 5 && player.greenStreak % 2 === 1) {
+      this.emitStatusTo(player.user.id, `${player.greenStreak} green in a row`, 'great', 6, 3400);
     }
 
     // Theirs. Only when the room already shows opponent ranks.
@@ -1169,26 +1174,44 @@ export class Room {
       this.settings.visibility === 'best';
     if (!improved || !canSeeRanks) return;
 
-    // A runaway lead. Compared against the best of everyone else rather than
-    // an absolute threshold, so it fires when someone is genuinely ahead of
-    // this room rather than whenever a low number appears.
+    this.announceLeadChange(player, rank);
+
+    if (rank <= 25) {
+      this.emitStatus(`${name} is ${away} away`, 'rival', 5, 3600);
+    } else {
+      this.emitStatus(`${name} is closing in, ${away} away`, 'rival', 3);
+    }
+  }
+
+  /**
+   * Called when somebody takes the lead they did not previously hold.
+   *
+   * Tracked as room state rather than derived per guess, because "who is in
+   * front" only changes on the guess that overtakes: recomputing it every time
+   * would announce the same leader repeatedly while they extended a lead they
+   * already had.
+   */
+  private announceLeadChange(player: PlayerState, rank: number): void {
+    if (this.contenders.length < 2) return;
+
     const rivalBest = Math.min(
       ...this.contenders
         .filter((p) => p.user.id !== player.user.id)
         .map((p) => p.bestRank ?? Number.POSITIVE_INFINITY),
     );
-    const runaway =
-      Number.isFinite(rivalBest) && rivalBest / rank >= 5 && rank <= 2000 && this.contenders.length > 1;
-    if (runaway) {
-      this.emitStatus(`${name} is well ahead — ${away} away`, 'rival', 7, 4000);
-      return;
-    }
+    if (!Number.isFinite(rivalBest) || rank >= rivalBest) return;
+    if (this.leaderId === player.user.id) return;
 
-    if (rank <= 25) {
-      this.emitStatus(`${name} is ${away} away`, 'rival', 5, 3600);
-    } else if (rank <= 200) {
-      this.emitStatus(`${name} is closing in — ${away} away`, 'rival', 3);
-    }
+    const first = this.leaderId === null;
+    this.leaderId = player.user.id;
+    this.emitStatus(
+      first
+        ? `${player.user.displayName} is out in front`
+        : `${player.user.displayName} is now in the lead`,
+      'rival',
+      8,
+      4000,
+    );
   }
 
   chat(userId: string, text: string): void {
@@ -1202,7 +1225,7 @@ export class Room {
     if (this.phase === 'playing' && this.table) {
       const lowered = clean.toLowerCase();
       if (new RegExp(`\\b${this.table.secret}\\b`).test(lowered)) {
-        this.bus.toUser(userId, 'toast', { kind: 'warn', text: 'Nice try — that word is filtered from chat' });
+        this.bus.toUser(userId, 'toast', { kind: 'warn', text: 'Nice try. That word is filtered from chat' });
         return;
       }
     }
@@ -1287,6 +1310,7 @@ export class Room {
       lastRound: this.phase === 'roundEnd' || this.phase === 'matchEnd' ? (this.rounds[this.rounds.length - 1] ?? null) : null,
       feed: this.feed,
       autoStart: this.managed,
+      dailyCoop: this.isDailyCoop,
       secretLength:
         this.settings.showWordLength && this.table && this.phase !== 'lobby'
           ? this.table.secret.length

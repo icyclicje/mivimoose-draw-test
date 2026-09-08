@@ -31,7 +31,7 @@ const schema = z.object({
   DISCORD_CLIENT_SECRET: z.string().trim().optional(),
   DISCORD_BOT_TOKEN: z.string().optional(),
 
-  // Generated and persisted when absent — see resolveSessionSecret.
+  // Generated and persisted when absent. See resolveSessionSecret.
   SESSION_SECRET: z.string().optional(),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 
@@ -90,7 +90,7 @@ function resolveSessionSecret(explicit: string | undefined): SessionSecret {
     fs.writeFileSync(file, value, { mode: 0o600 });
     return { value, generated: true, persisted: true };
   } catch {
-    // A read-only filesystem is fine — sessions just do not survive a restart.
+    // A read-only filesystem is fine. Sessions just do not survive a restart.
     return { value, generated: true, persisted: false };
   }
 }
@@ -152,7 +152,7 @@ export const env = {
   /**
    * The origin Discord serves this Activity from, or null when no client id is
    * configured. CORS also allows any *.discordsays.com origin, so an Activity
-   * still works the moment the id is added — no redeploy of the allow-list.
+   * still works the moment the id is added, with no redeploy of the allow-list.
    */
   activityOrigin: discordClientId ? `https://${discordClientId}.discordsays.com` : null,
 
@@ -175,15 +175,15 @@ export function reportEnvironment(log: {
     log.warn(
       half
         ? 'discord sign-in is off: DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET must both be set'
-        : 'discord sign-in is off — everyone plays as a guest. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET to enable it.',
+        : 'discord sign-in is off, so everyone plays as a guest. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET to enable it.',
     );
   }
 
   if (env.sessionSecretGenerated) {
     log.warn(
       env.sessionSecretPersisted
-        ? `SESSION_SECRET not set — generated one and saved it to ${secretStorePath()}. Set SESSION_SECRET to keep sessions across redeploys.`
-        : 'SESSION_SECRET not set and could not be saved — a new one is generated on every restart, so everyone is signed out when the server restarts.',
+        ? `SESSION_SECRET not set, so one was generated and saved to ${secretStorePath()}. Set SESSION_SECRET to keep sessions across redeploys.`
+        : 'SESSION_SECRET not set and could not be saved. A new one is generated on every restart, so everyone is signed out when the server restarts.',
     );
   }
 }

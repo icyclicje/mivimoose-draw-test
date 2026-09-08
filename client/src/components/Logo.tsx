@@ -1,10 +1,17 @@
 /**
- * Mivi — the Mivimoose Guess mascot.
+ * Mivi, the Mivimoose Guess mascot.
  *
  * The character *is* the question mark: the hook is his head, the eyes sit on
  * the crown of the curve, the stem is his body and the dot beneath is his feet.
  * Everything is drawn as one thick round-capped stroke so he stays legible when
  * shrunk to a 16px favicon, where the arms and mouth drop out automatically.
+ *
+ * The silhouette is painted from `--brand` so Mivi follows the theme: he darkens
+ * with the wordmark beside him on the two light themes, and goes hueless on Mono
+ * rather than staying the only coloured thing on the page. The face and the
+ * specular highlight stay fixed, because they only ever sit on top of the body
+ * and never touch the page. There is no token that is dark under all seven
+ * themes, so deriving the eyes would blank them out on one half or the other.
  */
 
 interface LogoProps {
@@ -33,10 +40,13 @@ export function Logo({ size = 32, full, animated = false, className, title = 'Mi
     >
       <title>{title}</title>
       <defs>
+        {/* var() has to go through style rather than the stopColor attribute:
+            presentation attributes are not resolved against the custom property
+            in every engine, an inline style always is. */}
         <linearGradient id={`${uid}-body`} x1="20%" y1="0%" x2="80%" y2="100%">
-          <stop offset="0%" stopColor="#ffd992" />
-          <stop offset="46%" stopColor="#ffb020" />
-          <stop offset="100%" stopColor="#e08a06" />
+          <stop offset="0%" style={{ stopColor: 'var(--brand)' }} />
+          <stop offset="46%" style={{ stopColor: 'var(--brand)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--brand)' }} stopOpacity="0.78" />
         </linearGradient>
         <linearGradient id={`${uid}-shine`} x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
@@ -64,7 +74,7 @@ export function Logo({ size = 32, full, animated = false, className, title = 'Mi
         <path d="M36 46 C36 26 52 15 68 19 C84 23 92 38 83 51 C76 61 65 62 64 74 L64 82" />
       </g>
 
-      {/* Highlight along the crown, which is what stops the amber reading flat. */}
+      {/* Highlight along the crown, which is what stops the body reading flat. */}
       <path
         d="M40 42 C41 26 54 17 68 20"
         fill="none"
@@ -78,7 +88,7 @@ export function Logo({ size = 32, full, animated = false, className, title = 'Mi
 
       {/* Face, sitting on the crown of the hook. The whole face has to live
           inside the 20px stroke, so the eyes ride high and the mouth tucks just
-          above the stroke's lower edge — drop it any further and it detaches
+          above the stroke's lower edge. Drop it any further and it detaches
           into the counter of the glyph. */}
       <g style={animated ? { animation: 'blink 5.5s ease-in-out infinite', transformOrigin: '64px 20px' } : undefined}>
         <ellipse cx="54.5" cy="19.5" rx="5.3" ry="5.7" fill="#241601" />

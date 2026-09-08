@@ -6,7 +6,14 @@
 export interface ThemeDef {
   id: string;
   name: string;
-  /** Two swatches for the switcher: ground and accent. */
+  /**
+   * Two swatches for the switcher: ground and accent.
+   *
+   * Literal hex on purpose, and the one place in the client that is allowed it.
+   * The picker draws all seven themes at once while only one of them is active,
+   * so a token would resolve to the current theme and every swatch would come
+   * out identical. These have to stay in step with themes.css by hand.
+   */
   swatch: [string, string];
 }
 

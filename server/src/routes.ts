@@ -388,12 +388,20 @@ export function createApiRouter() {
     const entry = await prisma.dailyEntry.findUnique({
       where: { dailyId_userId: { dailyId: daily.id, userId } },
     });
-    const [totalSolvers, best] = await Promise.all([
+    const [totalSolvers, best, everyone] = await Promise.all([
       prisma.dailyEntry.count({ where: { dailyId: daily.id, solved: true } }),
       prisma.dailyEntry.findFirst({
         where: { dailyId: daily.id, solved: true },
         orderBy: { guessCount: 'asc' },
         select: { guessCount: true },
+      }),
+      // Everyone who has tried today, solved or not. Summing guessCount here
+      // rather than counting Guess rows because the daily is played over REST
+      // and never writes to that table.
+      prisma.dailyEntry.aggregate({
+        where: { dailyId: daily.id },
+        _sum: { guessCount: true },
+        _count: { _all: true },
       }),
     ]);
 
@@ -413,6 +421,8 @@ export function createApiRouter() {
       standing,
       totalSolvers,
       bestGuessCount: best?.guessCount ?? null,
+      totalGuessesToday: everyone._sum.guessCount ?? 0,
+      totalPlayersToday: everyone._count._all,
     };
   }
 
@@ -677,8 +687,8 @@ export function createApiRouter() {
   });
 
   /**
-   * The full graph is moderator-only. It is not sensitive so much as noisy —
-   * a public concurrency chart invites people to read a quiet Tuesday as a
+   * The full graph is moderator-only. It is not sensitive so much as noisy.
+   * A public concurrency chart invites people to read a quiet Tuesday as a
    * verdict on the game.
    */
   router.get('/stats', requireAuth, async (req, res) => {

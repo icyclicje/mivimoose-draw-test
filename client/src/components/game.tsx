@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { heatFraction, type FeedEntry, type GuessResult, type RoomPlayer, type RoomState } from '@mivimoose/shared';
 import { bandColor, cx, formatClock, formatRank, modeLabel } from '../lib/format';
-import { Avatar } from './ui';
+import { Avatar, EmptyState, Modal } from './ui';
 
 /* ------------------------------------------------------------------ *
  * Guess row
@@ -15,7 +15,7 @@ import { Avatar } from './ui';
  * numbers have to sit orders apart for the priority to actually hold. Reading
  * order of who yields: the quiet "typed" note, then the line about who played
  * the word first, then the owner chip, and the word only once everything else
- * has collapsed. The rank is not in this table at all — it is `flex: none`,
+ * has collapsed. The rank is not in this table at all. It is `flex: none`,
  * because a row whose number has been squeezed off the end has lost the one
  * thing it exists to say.
  */
@@ -38,7 +38,7 @@ const noteStyle = (shrink: number, color: string): CSSProperties => ({
  * like they matter.
  *
  * The one addition is the steal marker. When a word was already played by
- * someone else this round the row says who got there first — that is the whole
+ * someone else this round the row says who got there first. That is the whole
  * social mechanic of a duel, so it earns a place on the row itself.
  */
 export function GuessRow({
@@ -70,8 +70,8 @@ export function GuessRow({
       className={cx('guess', found && 'guess--found', guess.repeat && 'guess--repeat')}
       // Shorter than the stylesheet default so a few more rows clear the fold.
       // Text sizes are untouched: 17px in a 34px box still has room to breathe.
-      // The pinned copy keeps its full height — it answers "what did that word
-      // do?" and should not read as just another line in the list.
+      // The pinned copy keeps its full height, because it answers "what did
+      // that word do?" and should not read as just another line in the list.
       style={{ height: pinned ? undefined : 34 }}
     >
       <motion.div
@@ -120,7 +120,7 @@ export function GuessRow({
           {guess.word}
         </span>
 
-        {/* The server ranks a resolved form — "harbor" for a typed "harbours".
+        {/* The server ranks a resolved form: "harbor" for a typed "harbours".
             Naming what you typed stops that reading as the game ignoring you,
             while the ranked word stays the loud half of the pair. */}
         {guess.normalizedFrom && (
@@ -172,11 +172,36 @@ export function GuessRow({
  * ------------------------------------------------------------------ */
 
 /**
- * The board: your latest guess held still at the top, and below it every guess
- * sorted closest-first.
+ * How many rows the board itself keeps.
+ *
+ * Ten is roughly where a Contexto board stops being something you read and
+ * turns into something you scroll. The rows that matter are the ones closing in
+ * on 1, and every cold guess you keep on screen pushes them further from your
+ * eye. The rest are not thrown away, they move one click back.
+ */
+const BOARD_ROWS = 10;
+
+/**
+ * Filter match for the browser search.
+ *
+ * Both halves of the pair a row can show are searchable: the word that was
+ * ranked, and the word that was actually typed. Typing "harbours" and getting
+ * nothing back would read as that guess having been lost, when in truth it is
+ * sitting there under "harbor".
+ */
+function matchesQuery(guess: GuessResult, needle: string): boolean {
+  return (
+    guess.word.toLowerCase().includes(needle) ||
+    (guess.normalizedFrom?.toLowerCase().includes(needle) ?? false)
+  );
+}
+
+/**
+ * The board: your latest guess held still at the top, and under it the ten
+ * closest guesses of the round. Everything else sits behind one button.
  *
  * The pinned row is the point. Without it, playing a cold word sends it to the
- * bottom of a long list and you never see where it landed — so the answer to
+ * bottom of a long list and you never see where it landed. So the answer to
  * "what did that do?" is always in the same place, and the list underneath is
  * left alone rather than scrolled around under you.
  */
@@ -197,11 +222,14 @@ export function GuessList({
   /** Changes on every submission so a repeated word still re-flashes. */
   pulse?: number;
   emptyHint?: string;
-  /** Shared boards — co-op, or full visibility — where the rows come from more
+  /** Shared boards (co-op, or full visibility) where the rows come from more
    *  than one player and each needs a name on it. */
   showOwners?: boolean;
   nameFor?: (playerId: string) => string;
 }) {
+  const [browsing, setBrowsing] = useState(false);
+  const [query, setQuery] = useState('');
+
   const latest = useMemo(() => {
     if (!latestId) return undefined;
     if (latestGuess && latestGuess.id === latestId) return latestGuess;
@@ -209,9 +237,34 @@ export function GuessList({
   }, [guesses, latestId, latestGuess]);
 
   const sorted = useMemo(() => [...guesses].sort((a, b) => a.rank - b.rank), [guesses]);
+  const top = useMemo(() => sorted.slice(0, BOARD_ROWS), [sorted]);
+
+  const needle = query.trim().toLowerCase();
+  const matches = useMemo(
+    () => (needle ? sorted.filter((guess) => matchesQuery(guess, needle)) : sorted),
+    [sorted, needle],
+  );
 
   const ownerOf = (guess: GuessResult) =>
     showOwners && nameFor ? nameFor(guess.playerId) : undefined;
+
+  const closeBrowser = () => {
+    setBrowsing(false);
+    // Opening the list again should show the whole list, not whatever was left
+    // in the box the last time it was open.
+    setQuery('');
+  };
+
+  // A round ending, or switching to a board nobody has guessed on yet, empties
+  // the list and takes the dialog off screen while it is still flagged open.
+  // Clearing the flag here stops it reappearing on its own the next time this
+  // board has rows to show.
+  useEffect(() => {
+    if (guesses.length === 0) {
+      setBrowsing(false);
+      setQuery('');
+    }
+  }, [guesses.length]);
 
   if (!guesses.length) {
     return (
@@ -233,9 +286,10 @@ export function GuessList({
               pinned
             />
           </ul>
-          {/* The pinned row also appears in the sorted list below. Without a
-              divider the two identical rows read as a duplicate bug rather than
-              "here is your last guess, and here is where it sits". */}
+          {/* Your last guess is usually in the ranked list below as well, and is
+              behind the button instead when it landed outside the ten. Without a
+              divider the two copies read as a duplicate bug rather than "here is
+              your last guess, and here is where it sits". */}
           <div
             aria-hidden="true"
             style={{ height: 1, background: 'var(--line)', margin: '0 var(--s1)' }}
@@ -243,16 +297,99 @@ export function GuessList({
         </div>
       )}
 
+      {/* Ten rows is roughly 380px, which on a 700px window pushed the chat
+          drawer below the fold. Capping the list keeps the page a fixed height
+          whatever the round does, and the "See all" button deliberately sits
+          outside this scroller so the route to the full list is never the thing
+          you have to scroll to find. */}
       <ul
         className="col"
-        style={{ margin: 0, padding: 0, gap: 'var(--s1)', listStyle: 'none', minHeight: 0 }}
+        style={{
+          margin: 0,
+          padding: 0,
+          gap: 'var(--s1)',
+          listStyle: 'none',
+          minHeight: 0,
+          maxHeight: 'min(38vh, 280px)',
+          overflowY: 'auto',
+        }}
       >
         <AnimatePresence initial={false}>
-          {sorted.map((guess) => (
+          {top.map((guess) => (
             <GuessRow key={guess.id} guess={guess} ownerName={ownerOf(guess)} />
           ))}
         </AnimatePresence>
       </ul>
+
+      {/* Not a ghost button. It is the only route to the rest of the round, and
+          under a stack of coloured rows a borderless one stops reading as a
+          control at all. */}
+      {sorted.length > BOARD_ROWS && (
+        <button
+          type="button"
+          className="btn btn--sm btn--block"
+          onClick={() => setBrowsing(true)}
+          aria-haspopup="dialog"
+        >
+          See all {sorted.length} guesses
+        </button>
+      )}
+
+      <Modal open={browsing} title="All guesses" onClose={closeBrowser}>
+        <div className="col" style={{ gap: 'var(--s3)', minHeight: 0 }}>
+          <div className="row" style={{ gap: 'var(--s3)' }}>
+            <input
+              className="input grow"
+              value={query}
+              // The box is the reason this dialog opened, so it takes the caret
+              // without a second click.
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter by word"
+              aria-label="Filter guesses by word"
+              style={{ height: 36 }}
+            />
+            <span
+              className="mono faint"
+              aria-live="polite"
+              style={{ fontSize: 12.5, flex: 'none' }}
+            >
+              {needle ? `${matches.length} of ${sorted.length}` : `${sorted.length} guesses`}
+            </span>
+          </div>
+
+          {/* A floor under the results. An unfiltered list is always at its cap
+              here, so without one the dialog collapses the moment a filter
+              narrows to a row or two and springs back when the box is cleared,
+              which makes it lurch under the cursor while you type. */}
+          <div style={{ minHeight: 160 }}>
+            {matches.length === 0 ? (
+              <EmptyState
+                title="No word matches that"
+                hint={`None of the ${sorted.length} guesses contain "${query.trim()}".`}
+              />
+            ) : (
+              <ul
+                className="col"
+                style={{
+                  margin: 0,
+                  padding: 0,
+                  gap: 'var(--s1)',
+                  listStyle: 'none',
+                  // The dialog is capped, so the list scrolls inside it instead
+                  // of pushing the search box off the top on a long round.
+                  maxHeight: 'min(52vh, 360px)',
+                  overflowY: 'auto',
+                }}
+              >
+                {matches.map((guess) => (
+                  <GuessRow key={guess.id} guess={guess} ownerName={ownerOf(guess)} />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -504,7 +641,12 @@ export function Feed({ entries, meId }: { entries: FeedEntry[]; meId: string | n
 export function RoundBanner({ room }: { room: RoomState }) {
   return (
     <div className="row row--wrap" style={{ gap: 6 }}>
-      <span className="chip chip--brand">{modeLabel(room.mode)}</span>
+      {/* Today's daily played together runs on the co-op rules, but nobody set
+          it up and it is not a custom game. Naming it for the daily is the only
+          place that difference shows on this strip. */}
+      <span className="chip chip--brand">
+        {room.dailyCoop ? 'Daily co-op' : modeLabel(room.mode)}
+      </span>
       {room.totalRounds > 1 && (
         <span className="chip">
           Round {room.round} of {room.totalRounds}

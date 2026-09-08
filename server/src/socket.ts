@@ -14,7 +14,6 @@ import {
 import { verifySession } from './auth.js';
 import { displayRating, ensureGuildMembership, prisma, toPublicUser } from './db.js';
 import { corsDelegate } from './cors.js';
-import { env } from './env.js';
 import { log } from './log.js';
 import { GuessRejected, type Room } from './game/Room.js';
 import { RoomManager } from './game/RoomManager.js';
@@ -182,7 +181,7 @@ export function createSocketServer(httpServer: HttpServer) {
 
     // Send the headcount straight away rather than making the home screen show
     // "quiet right now" for up to ten seconds while it waits for the first
-    // scheduled broadcast — including to the person who just arrived.
+    // scheduled broadcast. That includes the person who just arrived.
     {
       const stats = manager.stats();
       io.emit('presence', { online: onlineCount(), inGame: stats.players, rooms: stats.rooms });
@@ -255,7 +254,7 @@ export function createSocketServer(httpServer: HttpServer) {
             // Quick match is the ranked ladder. If it did not move Elo there
             // would be nothing for the rank tiers to measure.
             ranked: true,
-            // And a public round ends the moment somebody lands it — making
+            // And a public round ends the moment somebody lands it. Making
             // nine people watch a dead clock is the fastest way to lose them.
             endOnFirstFind: true,
           },
@@ -287,6 +286,7 @@ export function createSocketServer(httpServer: HttpServer) {
         guildId: data.guildId,
       });
       room.forcedSecrets = [dailyWordFor(todayKey())];
+      room.isDailyCoop = true;
       enterRoom(room);
       ack?.(ok({ code: room.code }));
     });
@@ -300,7 +300,7 @@ export function createSocketServer(httpServer: HttpServer) {
       const room = currentRoom();
       if (!room) return ack?.(fail('You are not in a room'));
       if (room.managed) {
-        return ack?.(fail('Quick match settings are fixed — host a custom game to change them', 'locked'));
+        return ack?.(fail('Quick match settings are fixed, so host a custom game to change them', 'locked'));
       }
       if (room.hostId !== user.id) return ack?.(fail('Only the host can change settings', 'not-host'));
       if (room.phase !== 'lobby') return ack?.(fail('Settings are locked once a match starts', 'locked'));

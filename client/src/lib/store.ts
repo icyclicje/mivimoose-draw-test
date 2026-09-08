@@ -158,9 +158,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   async boot() {
     // Ask the server what it supports first. A deployment with no Discord
-    // credentials — which is the default, so `railway up` just works — should
-    // go straight to guest sign-in rather than starting an OAuth flow that
-    // cannot possibly finish.
+    // credentials (the default, so `railway up` just works) should go straight
+    // to guest sign-in rather than starting an OAuth flow that cannot possibly
+    // finish.
     const config = await fetchServerConfig();
     set({ config });
 
@@ -454,7 +454,7 @@ function finishBoot(ctx: DiscordContext, set: SetState, get: () => AppState) {
   set({ ctx, user: ctx.user, socket, status: 'ready', error: null });
 
   // If we were launched inside a voice channel, everyone lands in the same
-  // room automatically — no codes to read out loud.
+  // room automatically, with no codes to read out loud.
   if (ctx.instanceId) void get().joinInstanceRoom();
   void setActivity('Mivimoose Guess', 'In the lobby');
 }

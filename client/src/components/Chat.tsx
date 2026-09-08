@@ -9,7 +9,7 @@ import { ModeIcon } from './ModeIcon';
  *
  * Two things share this log: people talking, and the game reporting itself.
  * They are drawn differently on purpose. Conversation sits left in full
- * contrast; everything the room did — joins, guesses, hints — is one quiet
+ * contrast; everything the room did (joins, guesses, hints) is one quiet
  * centred line. Without that split, the three or four lines a person actually
  * wrote get lost in fifty lines of guess traffic.
  * ------------------------------------------------------------------ */

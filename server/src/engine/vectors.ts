@@ -8,9 +8,9 @@ import { buildTopicModel } from './topicModel.js';
  * A loaded embedding space. Two implementations satisfy it:
  *
  *  - `vectors`: a binary index built from GloVe or word2vec by
- *    `npm run build:index`. This is what you want in production — real
- *    co-occurrence statistics over billions of tokens, which is exactly what
- *    Contexto's ranking is derived from.
+ *    `npm run build:index`. This is what you want in production, because it
+ *    is real co-occurrence statistics over billions of tokens, which is
+ *    exactly what Contexto's ranking is derived from.
  *  - `topic`: the bundled offline model. Always available, no download.
  */
 export interface VectorSpace {

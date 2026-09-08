@@ -1,5 +1,5 @@
 /**
- * The moderator statistics payload and the match replay paths — the two things
+ * The moderator statistics payload and the match replay paths: the two things
  * the other suites cannot reach, because one needs a role and the other needs a
  * finished match.
  *
@@ -17,7 +17,7 @@ const results = [];
 
 function check(label, ok, detail = '') {
   results.push({ label, ok: Boolean(ok) });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`);
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
