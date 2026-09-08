@@ -372,29 +372,55 @@ of resident memory, so size the instance accordingly.
 
 ### Railway
 
-The repo ships a [`railway.toml`](railway.toml) that wires up the build and
-start commands, so connecting the repo is most of the work. The rest is four
-things to set up once.
+**Nothing is required.** Connect the repo and deploy — the server boots with no
+environment variables at all and you get a working game: guest accounts, every
+mode, the daily, friends, leaderboards. The [`railway.toml`](railway.toml) wires
+up the build and start commands, so that really is the whole of it.
 
-1. **New project → Deploy from GitHub repo**, pick this repo.
-2. **Attach a Volume** (Settings → Volumes), mount path `/data`. This is where
-   the SQLite database and the built vector index live, so they survive a
-   redeploy instead of resetting every time.
-3. **Generate a domain** (Settings → Networking → Generate Domain) so
-   `RAILWAY_PUBLIC_DOMAIN` exists for the variable reference below.
-4. **Set variables** (Variables tab):
+What you give up by setting nothing:
 
-   | Key | Value |
-   | --- | --- |
-   | `SESSION_SECRET` | a random 32+ character string |
-   | `DATABASE_URL` | `file:${{RAILWAY_VOLUME_MOUNT_PATH}}/db/arena.db` |
-   | `CORS_ORIGINS` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
-   | `NODE_ENV` | `production` |
-   | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | real values if wiring up the Activity, otherwise any placeholder — guest play doesn't need them |
-   | `EMBEDDING_PROVIDER` | `vectors` (200k-word index) or `topic` (bundled 1,808-word model, no download) |
+- **Discord sign-in is off.** Everyone plays as a guest. Guests keep stats and
+  appear on leaderboards; they just cannot use friends, since there is no
+  durable identity behind them.
+- **The session secret is generated.** It is saved to the volume (or to
+  `server/data/`), so sessions survive a restart — but not a redeploy onto a
+  fresh filesystem, and not a second instance, which would invent its own.
+
+The server prints exactly this at boot, so you never have to guess which mode
+you are in:
+
+```
+warn  discord sign-in is off — everyone plays as a guest. Set DISCORD_CLIENT_ID
+      and DISCORD_CLIENT_SECRET to enable it.
+warn  SESSION_SECRET not set — generated one and saved it to /data/.session-secret.
+      Set SESSION_SECRET to keep sessions across redeploys.
+```
+
+#### Worth doing anyway
+
+1. **Attach a Volume** (Settings → Volumes), mount path `/data`. The SQLite
+   database, the built vector index and the generated session secret all live
+   here, so they survive a redeploy instead of resetting.
+2. **Generate a domain** (Settings → Networking → Generate Domain).
+3. Set these, none of which are required but all of which are a good idea:
+
+   | Key | Value | Why |
+   | --- | --- | --- |
+   | `DATABASE_URL` | `file:${{RAILWAY_VOLUME_MOUNT_PATH}}/db/arena.db` | keeps accounts and match history on the volume |
+   | `CORS_ORIGINS` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` | same-origin requests are allowed automatically, but this covers anything else you point at it |
+   | `NODE_ENV` | `production` | |
+   | `SESSION_SECRET` | a random 32+ character string | sessions then survive a redeploy and scale past one instance |
+   | `EMBEDDING_PROVIDER` | `vectors` for the 200k-word index, `topic` for the bundled 1,808-word model | `topic` skips the ~250MB download and boots in seconds |
 
    `${{...}}` is Railway's variable-reference syntax — paste it literally and
    Railway fills in the real value.
+
+#### Adding Discord later
+
+Set `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` (both, or neither) and
+redeploy. The front end asks the server for the client id at boot rather than
+baking it in, so you do not need to rebuild it, and CORS already allows any
+`*.discordsays.com` origin.
 
 Deploy. The start command (`server/scripts/railway-start.mjs`) restores
 `data/index.bin` from the volume if it's there, otherwise downloads GloVe and

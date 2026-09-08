@@ -76,7 +76,20 @@ export interface DiscordTokenResponse {
  * Exchange the authorization code the embedded SDK hands us for an access
  * token. This must happen server side — the client secret never leaves here.
  */
+export class DiscordNotConfigured extends Error {
+  readonly code = 'discord-disabled';
+  constructor() {
+    super('Discord sign-in is not configured on this server');
+  }
+}
+
 export async function exchangeCode(code: string): Promise<DiscordTokenResponse> {
+  // Without both halves this would post empty credentials and come back as a
+  // confusing 401 from Discord. Fail here, with a reason the client can act on.
+  if (!env.discordEnabled || !env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
+    throw new DiscordNotConfigured();
+  }
+
   const body = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
     client_secret: env.DISCORD_CLIENT_SECRET,

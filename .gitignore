@@ -12,3 +12,5 @@ server/data/*
 !server/data/.gitkeep
 client/.vite/
 coverage/
+# Generated when SESSION_SECRET is unset. Signs every session token.
+server/data/.session-secret

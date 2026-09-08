@@ -19,6 +19,7 @@ import {
   type ProfileStats,
 } from '@mivimoose/shared';
 import {
+  DiscordNotConfigured,
   exchangeCode,
   fetchDiscordUser,
   optionalAuth,
@@ -45,6 +46,7 @@ import {
   searchPlayers,
   serverStats,
 } from './social.js';
+import { env } from './env.js';
 import { log } from './log.js';
 
 /**
@@ -113,9 +115,31 @@ export function createApiRouter() {
         user: toPublicUser(user, rating),
       });
     } catch (err) {
+      // A server with no Discord credentials is a configuration state, not a
+      // rejected login. The client uses the code to fall back to guest
+      // sign-in instead of showing an authentication failure.
+      if (err instanceof DiscordNotConfigured) {
+        res.status(503).json({ error: err.message, code: err.code });
+        return;
+      }
       log.error('auth: token exchange failed', err);
       res.status(401).json({ error: 'Discord rejected that login' });
     }
+  });
+
+  /**
+   * What this deployment supports, before anyone has signed in.
+   *
+   * The client asks first so it can skip the Discord handshake entirely on a
+   * server with no credentials, rather than starting it, failing, and showing
+   * an error for something that was never going to work.
+   */
+  router.get('/config', (_req, res) => {
+    res.json({
+      discordEnabled: env.discordEnabled,
+      discordClientId: env.DISCORD_CLIENT_ID,
+      guestsEnabled: true,
+    });
   });
 
   /**

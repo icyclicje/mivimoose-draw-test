@@ -15,7 +15,16 @@ import type {
   RoomState,
   ServerToClientEvents,
 } from '@mivimoose/shared';
-import { connectDiscord, guestLogin, isEmbedded, setActivity, SOCKET_PATH, type DiscordContext } from './discord';
+import {
+  connectDiscord,
+  fetchServerConfig,
+  guestLogin,
+  isEmbedded,
+  setActivity,
+  SOCKET_PATH,
+  type DiscordContext,
+  type ServerConfig,
+} from './discord';
 import { setApiToken } from './api';
 import { play } from './sound';
 
@@ -35,6 +44,8 @@ interface AppState {
   error: string | null;
 
   ctx: DiscordContext | null;
+  /** What the server supports. Null until boot has asked. */
+  config: ServerConfig | null;
   user: PublicUser | null;
   socket: GameSocket | null;
   connected: boolean;
@@ -125,6 +136,7 @@ export const useStore = create<AppState>((set, get) => ({
   error: null,
 
   ctx: null,
+  config: null,
   user: null,
   socket: null,
   connected: false,
@@ -143,18 +155,31 @@ export const useStore = create<AppState>((set, get) => ({
   /* ---------------------------------------------------------------- */
 
   async boot() {
+    // Ask the server what it supports first. A deployment with no Discord
+    // credentials — which is the default, so `railway up` just works — should
+    // go straight to guest sign-in rather than starting an OAuth flow that
+    // cannot possibly finish.
+    const config = await fetchServerConfig();
+    set({ config });
+
+    if (!config.discordEnabled) {
+      set({ status: 'auth', bootMessage: '', error: null });
+      return;
+    }
+
     try {
       set({ status: 'auth', bootMessage: 'Talking to Discord' });
-      const ctx = await connectDiscord();
+      const ctx = await connectDiscord(config.discordClientId);
       finishBoot(ctx, set, get);
     } catch (err) {
-      // In a plain browser tab the Discord handshake cannot succeed. Fall
-      // through to the dev login screen rather than dead-ending.
-      if (!isEmbedded) {
-        set({ status: 'auth', bootMessage: '', error: null });
+      // Outside Discord the handshake cannot succeed, and inside it a
+      // misconfigured app should still leave a way in. Guest sign-in is that
+      // way in either case; only surface an error if guests are off too.
+      if (!config.guestsEnabled && isEmbedded) {
+        set({ status: 'error', error: err instanceof Error ? err.message : 'Could not start' });
         return;
       }
-      set({ status: 'error', error: err instanceof Error ? err.message : 'Could not start' });
+      set({ status: 'auth', bootMessage: '', error: null });
     }
   },
 

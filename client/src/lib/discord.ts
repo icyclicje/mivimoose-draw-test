@@ -12,7 +12,38 @@ export const isEmbedded = new URLSearchParams(window.location.search).has('frame
 export const API_BASE = isEmbedded ? '/.proxy/api' : '/api';
 export const SOCKET_PATH = isEmbedded ? '/.proxy/socket.io' : '/socket.io';
 
-const CLIENT_ID = import.meta.env.VITE_DISCORD_CLIENT_ID as string | undefined;
+const BUILD_CLIENT_ID = import.meta.env.VITE_DISCORD_CLIENT_ID as string | undefined;
+
+export interface ServerConfig {
+  discordEnabled: boolean;
+  discordClientId: string | null;
+  guestsEnabled: boolean;
+}
+
+/**
+ * What this deployment supports.
+ *
+ * Asked before the Discord handshake so a server deployed without credentials
+ * goes straight to guest sign-in instead of starting an OAuth flow that cannot
+ * finish. The client id comes from here as well as from the build, so a Railway
+ * deploy that sets DISCORD_CLIENT_ID later starts working without rebuilding
+ * the front end.
+ */
+export async function fetchServerConfig(): Promise<ServerConfig> {
+  try {
+    const res = await fetch(`${API_BASE}/config`);
+    if (!res.ok) throw new Error(String(res.status));
+    const body = (await res.json()) as Partial<ServerConfig>;
+    return {
+      discordEnabled: Boolean(body.discordEnabled),
+      discordClientId: body.discordClientId ?? null,
+      guestsEnabled: body.guestsEnabled !== false,
+    };
+  } catch {
+    // An unreachable config endpoint should not block guest play.
+    return { discordEnabled: false, discordClientId: null, guestsEnabled: true };
+  }
+}
 
 export interface DiscordContext {
   token: string;
@@ -33,9 +64,10 @@ export function getSdk(): DiscordSDK | null {
  *   ready -> authorize (gets an OAuth code) -> our server swaps it for a token
  *   -> authenticate (hands the access token back to the SDK so RPC works).
  */
-export async function connectDiscord(): Promise<DiscordContext> {
+export async function connectDiscord(serverClientId?: string | null): Promise<DiscordContext> {
+  const CLIENT_ID = serverClientId || BUILD_CLIENT_ID;
   if (!CLIENT_ID) {
-    throw new Error('VITE_DISCORD_CLIENT_ID is not set. Copy .env.example to .env.');
+    throw new Error('This server has no Discord application configured.');
   }
 
   sdk = new DiscordSDK(CLIENT_ID);

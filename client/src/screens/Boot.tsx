@@ -10,12 +10,15 @@ export function Boot() {
   const bootMessage = useStore((s) => s.bootMessage);
   const error = useStore((s) => s.error);
   const bootGuest = useStore((s) => s.bootGuest);
+  const config = useStore((s) => s.config);
   const [name, setName] = useState('');
 
-  // Inside Discord the Activity handshake runs on its own. Everywhere else the
-  // guest door is the way in, and it is offered immediately rather than as a
-  // fallback after something fails.
-  const showGuest = !isEmbedded && (status === 'auth' || status === 'error');
+  // Inside Discord with a configured app, the Activity handshake runs on its
+  // own. Everywhere else — a plain browser tab, or a deployment with no Discord
+  // credentials at all — guest sign-in is the way in, including from inside the
+  // Discord iframe.
+  const discordEnabled = config?.discordEnabled ?? false;
+  const showGuest = (!isEmbedded || !discordEnabled) && (status === 'auth' || status === 'error');
 
   return (
     <div

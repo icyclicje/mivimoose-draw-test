@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { corsDelegate } from './cors.js';
-import { env } from './env.js';
+import { env, reportEnvironment } from './env.js';
 import { log } from './log.js';
 import { createApiRouter } from './routes.js';
 import { createSocketServer } from './socket.js';
@@ -52,7 +52,7 @@ async function main() {
 
   server.listen(env.PORT, () => {
     log.ok(`Mivimoose Guess server listening on http://localhost:${env.PORT}`);
-    log.info(`activity origin: ${env.activityOrigin}`);
+    reportEnvironment(log);
   });
 
   // Guest accounts are minted per sign-in, so a public deployment would grow a

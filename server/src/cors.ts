@@ -20,7 +20,7 @@ export function isOriginAllowed(origin: string, host?: string): boolean {
   if (host && origin.replace(/^https?:\/\//, '') === host) return true;
   return (
     env.corsOrigins.includes(origin) ||
-    origin === env.activityOrigin ||
+    (env.activityOrigin !== null && origin === env.activityOrigin) ||
     /^https:\/\/[\w-]+\.discordsays\.com$/.test(origin) ||
     (!env.isProd && /^http:\/\/localhost:\d+$/.test(origin))
   );

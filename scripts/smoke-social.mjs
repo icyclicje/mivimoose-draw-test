@@ -6,7 +6,7 @@
  */
 import { io } from 'socket.io-client';
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.MIVIMOOSE_URL ?? 'http://localhost:3001';
 const results = [];
 
 function check(label, ok, detail = '') {
