@@ -47,7 +47,10 @@ interface SoundPrefs {
 
 const STORAGE_KEY = 'mivimoose:sound';
 
-const DEFAULTS: SoundPrefs = { music: false, sfx: true, volume: 0.6 };
+// Music on by default. Browsers suspend audio until a gesture, so this cannot
+// start noise before the player has interacted — and the header toggle is one
+// click away for anyone who wants silence.
+const DEFAULTS: SoundPrefs = { music: true, sfx: true, volume: 0.6 };
 
 let prefs: SoundPrefs = load();
 let ctx: AudioContext | null = null;
@@ -129,11 +132,27 @@ interface ToneSpec {
   gain?: number;
   /** Seconds to wait before starting, for arpeggios. */
   delay?: number;
+  /**
+   * Where to route it. Music goes through its own gain node so stopping it can
+   * cut everything already scheduled; effects go straight to master.
+   */
+  dest?: AudioNode | null;
+  /** Attack in seconds. Pads want a slow swell, effects want a click-free 12ms. */
+  attack?: number;
 }
 
-function tone({ freq, dur, type = 'sine', gain = 0.18, delay = 0 }: ToneSpec): void {
+function tone({
+  freq,
+  dur,
+  type = 'sine',
+  gain = 0.18,
+  delay = 0,
+  dest = null,
+  attack = 0.012,
+}: ToneSpec): void {
   const c = audio();
   if (!c || !master) return;
+  const out = dest ?? master;
 
   const start = c.currentTime + delay;
   const osc = c.createOscillator();
@@ -147,13 +166,13 @@ function tone({ freq, dur, type = 'sine', gain = 0.18, delay = 0 }: ToneSpec): v
     osc.frequency.setValueAtTime(freq, start);
   }
 
-  // A short attack and an exponential tail: square-edged envelopes click.
+  // A shaped attack and an exponential tail: square-edged envelopes click.
   env.gain.setValueAtTime(0.0001, start);
-  env.gain.exponentialRampToValueAtTime(gain, start + 0.012);
+  env.gain.exponentialRampToValueAtTime(gain, start + Math.min(attack, dur * 0.5));
   env.gain.exponentialRampToValueAtTime(0.0001, start + dur);
 
   osc.connect(env);
-  env.connect(master);
+  env.connect(out);
   osc.start(start);
   osc.stop(start + dur + 0.02);
 }
@@ -269,90 +288,154 @@ export function playRank(rank: number): void {
 /**
  * Two beds, generated rather than streamed.
  *
- * `menu` is slow and open — a wandering pentatonic with long gaps, meant to sit
- * under browsing without asking for attention.
+ * The first attempt at this was one bass note every 1.8 seconds with a bell
+ * every third — technically playing, but far too sparse to read as music. What
+ * follows is written as an actual loop: a four-chord progression in A minor
+ * (i - VI - III - VII), with a sustained pad, a soft bass root and a slow
+ * arpeggio over the top. Every bar schedules eight or nine voices, so there is
+ * always something sounding.
  *
- * `game` is the competitive-chill one: same restraint, but with a steady pulse
- * under it and a tighter, more purposeful figure on top. It should feel like a
- * clock is running without ever becoming tense enough to distract from reading
- * words.
+ * `menu` breathes — long bars, gentle swell, no pulse.
+ * `game` is the same harmony tightened up: shorter bars, an off-beat pulse and
+ * a busier arpeggio, so it feels like a clock is running without ever competing
+ * with the words on screen.
  *
- * Both stay in A minor pentatonic so switching between them mid-session never
- * clashes.
+ * Both share the progression, so switching mid-session never clashes.
  */
 export type MusicMood = 'menu' | 'game';
 
+/** A minor: Am - F - C - G. Root, then the pad voicing, then the arpeggio. */
+interface Chord {
+  bass: number;
+  pad: [number, number, number];
+  arp: number[];
+}
+
+const PROGRESSION: Chord[] = [
+  { bass: 110.0, pad: [220.0, 261.6, 329.6], arp: [440.0, 523.3, 659.3, 523.3] }, // Am
+  { bass: 87.31, pad: [174.6, 220.0, 261.6], arp: [349.2, 440.0, 523.3, 440.0] }, // F
+  { bass: 130.8, pad: [196.0, 261.6, 329.6], arp: [523.3, 659.3, 784.0, 659.3] }, // C
+  { bass: 98.0, pad: [196.0, 246.9, 293.7], arp: [392.0, 493.9, 587.3, 493.9] }, // G
+];
+
 interface Bed {
-  /** ms between steps. */
-  tempo: number;
-  bass: number[];
-  lead: number[];
-  /** Play the lead every N steps. */
-  leadEvery: number;
+  /** One chord per bar. */
+  barMs: number;
+  padGain: number;
   bassGain: number;
-  leadGain: number;
-  /** A quiet off-beat pulse. Only the game bed uses one. */
+  arpGain: number;
+  /** How many arpeggio notes to play across the bar. */
+  arpNotes: number;
+  /** A quiet off-beat tick. Only the game bed has one. */
   pulse: boolean;
 }
 
 const BEDS: Record<MusicMood, Bed> = {
   menu: {
-    tempo: 1800,
-    bass: [110, 131, 147, 98],
-    lead: [523, 587, 659, 784, 880],
-    leadEvery: 3,
+    barMs: 3600,
+    padGain: 0.028,
     bassGain: 0.05,
-    leadGain: 0.03,
+    arpGain: 0.022,
+    arpNotes: 2,
     pulse: false,
   },
   game: {
-    // Faster and evenly divided, so the pulse reads as a heartbeat rather than
-    // a melody you start following instead of playing.
-    tempo: 1100,
-    bass: [110, 110, 147, 131],
-    lead: [659, 784, 880, 784, 659, 587],
-    leadEvery: 2,
-    bassGain: 0.055,
-    leadGain: 0.028,
+    barMs: 2400,
+    padGain: 0.022,
+    bassGain: 0.045,
+    arpGain: 0.026,
+    arpNotes: 4,
     pulse: true,
   },
 };
 
 let musicMood: MusicMood = 'menu';
+let musicBar = 0;
+
+/** Music sits well under the effects; it is a room tone, not a track. */
+const MUSIC_LEVEL = 0.5;
+
+function ensureMusicGain(): GainNode | null {
+  const c = audio();
+  if (!c || !master) return null;
+  if (musicGain) return musicGain;
+  musicGain = c.createGain();
+  musicGain.gain.value = MUSIC_LEVEL;
+  musicGain.connect(master);
+  return musicGain;
+}
+
+function playBar(): void {
+  const bed = BEDS[musicMood];
+  const chord = PROGRESSION[musicBar % PROGRESSION.length];
+  const dest = ensureMusicGain();
+  if (!dest) return;
+
+  const bar = bed.barMs / 1000;
+
+  // Bass root, held almost the whole bar.
+  tone({
+    freq: chord.bass,
+    dur: bar * 0.92,
+    type: 'sine',
+    gain: bed.bassGain,
+    attack: 0.25,
+    dest,
+  });
+
+  // Pad: the three chord tones, staggered slightly so they bloom rather than
+  // arriving as one block, and overlapping the bar line so there is no gap.
+  chord.pad.forEach((freq, i) => {
+    tone({
+      freq,
+      dur: bar * 1.02,
+      type: 'sine',
+      gain: bed.padGain,
+      attack: 0.6,
+      delay: i * 0.05,
+      dest,
+    });
+  });
+
+  // Arpeggio over the top, spread evenly across the bar.
+  const spacing = bar / (bed.arpNotes + 0.5);
+  for (let i = 0; i < bed.arpNotes; i++) {
+    tone({
+      freq: chord.arp[i % chord.arp.length],
+      dur: spacing * 1.4,
+      type: 'triangle',
+      gain: bed.arpGain,
+      attack: 0.08,
+      delay: spacing * (i + 0.25),
+      dest,
+    });
+  }
+
+  if (bed.pulse) {
+    // Off-beat, an octave above the root, barely there. This is the whole of
+    // what makes the game bed feel like it is moving.
+    for (const at of [0.5, 1.5]) {
+      tone({
+        freq: chord.bass * 2,
+        dur: 0.1,
+        type: 'triangle',
+        gain: 0.016,
+        delay: (bar * at) / 2,
+        dest,
+      });
+    }
+  }
+
+  musicBar += 1;
+}
 
 export function startMusic(mood: MusicMood = musicMood): void {
   musicMood = mood;
   if (musicTimer !== null || !prefs.music) return;
-  const c = audio();
-  if (!c || !master) return;
+  if (!ensureMusicGain()) return;
 
-  const step = () => {
-    const bed = BEDS[musicMood];
-    const i = musicStep % bed.bass.length;
-    tone({ freq: bed.bass[i], dur: bed.tempo / 1000 - 0.15, type: 'sine', gain: bed.bassGain });
-
-    if (musicStep % bed.leadEvery === 0) {
-      const note = bed.lead[(musicStep * 2) % bed.lead.length];
-      tone({ freq: note, dur: 1.1, type: 'triangle', gain: bed.leadGain });
-    }
-
-    if (bed.pulse) {
-      // Off-beat, an octave up, barely there. This is what makes the game bed
-      // feel like it is moving without adding anything to listen to.
-      tone({
-        freq: bed.bass[i] * 2,
-        dur: 0.09,
-        type: 'triangle',
-        gain: 0.018,
-        delay: bed.tempo / 2000,
-      });
-    }
-
-    musicStep += 1;
-  };
-
-  step();
-  musicTimer = window.setInterval(step, BEDS[mood].tempo);
+  playBar();
+  musicTimer = window.setInterval(playBar, BEDS[mood].barMs);
 }
 
 export function stopMusic(): void {
@@ -360,6 +443,9 @@ export function stopMusic(): void {
     window.clearInterval(musicTimer);
     musicTimer = null;
   }
+  // Disconnecting the shared gain silences everything already scheduled — pads
+  // run for a whole bar, so without this the music would keep sounding for
+  // seconds after being turned off.
   musicGain?.disconnect();
   musicGain = null;
 }
@@ -368,17 +454,16 @@ export function stopMusic(): void {
  * Switch bed without a gap.
  *
  * Called on every room-phase change, so it has to be cheap and idempotent —
- * restarting the loop only when the mood actually differs, otherwise the music
- * would stutter every time the room state was pushed.
+ * restarting only when the mood actually differs, or the music would stutter
+ * every time room state was pushed. The bar counter is kept so the progression
+ * continues rather than snapping back to the first chord.
  */
 export function setMusicMood(mood: MusicMood): void {
   if (mood === musicMood) return;
   musicMood = mood;
-  musicStep = 0;
   if (musicTimer !== null) {
     window.clearInterval(musicTimer);
-    musicTimer = null;
-    startMusic(mood);
+    musicTimer = window.setInterval(playBar, BEDS[mood].barMs);
   }
 }
 
