@@ -21,11 +21,11 @@ import { useStore, type Tab } from '../lib/store';
  */
 const FEATURED: GameMode[] = ['classic', 'duel', 'blitz', 'elimination'];
 
-// Daily is a tab of its own, so it never appears as a tile.
 const FEATURED_MODES: ModeDescriptor[] = FEATURED.map((id) =>
   MODE_LIST.find((m) => m.id === id),
 ).filter((m): m is ModeDescriptor => m !== undefined);
 
+// Daily is a tab of its own, so it never appears as a tile.
 const MORE_MODES: ModeDescriptor[] = MODE_LIST.filter(
   (m) => m.id !== 'daily' && !FEATURED.includes(m.id),
 );
@@ -72,6 +72,7 @@ export function Home() {
   const toast = useStore((s) => s.toast);
   const presence = useStore((s) => s.presence);
   const invites = useStore((s) => s.invites);
+  const connected = useStore((s) => s.connected);
   const role = useStore((s) => s.user)?.role;
 
   const [code, setCode] = useState('');
@@ -79,6 +80,12 @@ export function Home() {
   const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState<GameMode | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  // The lobby list arrives on a socket ack, which replaces the array whole. A
+  // changed reference is therefore proof the server answered, and that is the
+  // difference between "no open games" and "we have not asked yet".
+  const [roomsAtMount] = useState(publicRooms);
+  const lobbyAnswered = publicRooms !== roomsAtMount;
 
   useEffect(() => {
     refreshLobby();
@@ -90,28 +97,46 @@ export function Home() {
   // with a deadline; nothing else on this page needs a per-second re-render.
   useEffect(() => {
     if (invites.length === 0) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    // The clock can be minutes stale if this screen has been open a while, so
+    // resync before the first tick rather than showing a wrong countdown.
+    setNow(Date.now());
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      // Drop dead invites rather than leaving every screen to filter them out.
+      // Emptying the list is also what stops this interval.
+      for (const invite of useStore.getState().invites) {
+        if (invite.expiresAt <= t) useStore.getState().dismissInvite(invite.id);
+      }
+    }, 1000);
     return () => window.clearInterval(id);
   }, [invites.length]);
 
   const shortcuts = SHORTCUTS.filter((s) => s.id !== 'stats' || STAFF_ROLES.includes(role ?? ''));
-  // An expired invite is dead weight: the store keeps it, the screen drops it.
+  // Covers the sub-second gap between an invite expiring and the tick above
+  // clearing it out of the store.
   const pending = invites.filter((invite) => invite.expiresAt > now);
 
   async function launch(mode: GameMode, viaQuickplay: boolean) {
     tap();
+    // Daily is an HTTP screen rather than a room, so it works with no socket.
+    if (mode === 'daily') {
+      setTab('daily');
+      return;
+    }
     setBusy(mode);
     try {
-      if (mode === 'daily') {
-        setTab('daily');
-        return;
-      }
       if (viaQuickplay) await quickplay(mode);
       else await createRoom(defaultsForMode(mode));
     } finally {
       setBusy(null);
     }
   }
+
+  // Everything that needs the socket. The store's room actions return silently
+  // when there is none, so without this the buttons would look fine and do
+  // nothing at all.
+  const blocked = busy !== null || !connected;
 
   return (
     <div className="page" style={{ gap: 'var(--s4)' }}>
@@ -134,7 +159,7 @@ export function Home() {
               }}
             >
               <Avatar user={invite.from} size={28} />
-              <span className="grow col" style={{ minWidth: 0, gap: 1 }}>
+              <span className="grow col" style={{ minWidth: 0, gap: 0 }}>
                 <span className="truncate" style={{ fontSize: 13.5 }}>
                   <span className="bold">{invite.from.displayName}</span> invited you to{' '}
                   {modeLabel(invite.mode)}
@@ -145,6 +170,7 @@ export function Home() {
               </span>
               <button
                 className="btn btn--primary btn--sm"
+                disabled={!connected}
                 onClick={() => {
                   tap();
                   void useStore.getState().acceptInvite(invite.code);
@@ -154,7 +180,10 @@ export function Home() {
               </button>
               <button
                 className="btn btn--ghost btn--sm"
-                onClick={() => useStore.getState().dismissInvite(invite.id)}
+                onClick={() => {
+                  unlockAudio();
+                  useStore.getState().dismissInvite(invite.id);
+                }}
               >
                 Dismiss
               </button>
@@ -180,15 +209,25 @@ export function Home() {
                 height: 7,
                 borderRadius: '50%',
                 flex: 'none',
-                background: presence.online > 0 ? 'var(--green)' : 'var(--surface-3)',
+                background: !connected
+                  ? 'var(--orange)'
+                  : presence.online > 0
+                    ? 'var(--green)'
+                    : 'var(--surface-3)',
               }}
             />
             <span className="col" style={{ gap: 0 }}>
-              {/* "0 playing now" reads as broken. "Quiet right now" reads as true. */}
+              {/* "0 playing now" reads as broken; "quiet right now" reads as
+                  true. And a headcount from before the socket dropped is worse
+                  than saying the connection is gone. */}
               <span className="bold mono" style={{ fontSize: 15 }}>
-                {presence.online > 0 ? `${presence.online} playing now` : 'Quiet right now'}
+                {!connected
+                  ? 'Reconnecting'
+                  : presence.online > 0
+                    ? `${presence.online} playing now`
+                    : 'Quiet right now'}
               </span>
-              {presence.online > 0 && (
+              {connected && presence.online > 0 && (
                 <span className="faint thin mono" style={{ fontSize: 12 }}>
                   {presence.inGame} in a game · {presence.rooms} rooms
                 </span>
@@ -205,7 +244,7 @@ export function Home() {
         <div className="row row--wrap" style={{ gap: 'var(--s2)' }}>
           <button
             className="btn btn--primary btn--lg"
-            disabled={busy !== null}
+            disabled={blocked}
             onClick={() => void launch('classic', true)}
           >
             {busy === 'classic' ? <Spinner /> : <ModeIcon name="bolt" size={16} />}
@@ -220,18 +259,23 @@ export function Home() {
           </button>
           <button
             className="btn btn--lg"
-            disabled={busy !== null}
+            disabled={blocked}
             onClick={() => void launch('duel', true)}
           >
             {busy === 'duel' ? <Spinner /> : <ModeIcon name="swords" size={16} />}
             Duel
           </button>
-          <button className="btn btn--lg" onClick={() => void launch('daily', false)}>
+          <button
+            className="btn btn--lg"
+            disabled={busy !== null}
+            onClick={() => void launch('daily', false)}
+          >
             <ModeIcon name="calendar" size={16} />
             Daily
           </button>
           <button
             className="btn btn--lg"
+            disabled={blocked}
             onClick={() => {
               tap();
               setCustomOpen(true);
@@ -241,9 +285,6 @@ export function Home() {
             Custom game
           </button>
         </div>
-        <span className="faint thin" style={{ fontSize: 12.5 }}>
-          Quick match finds a game and starts it for you. Custom game has the settings.
-        </span>
       </motion.section>
 
       {/* ------------------------------------------------------------ modes */}
@@ -272,14 +313,14 @@ export function Home() {
         }
       >
         <div className="col" style={{ gap: 'var(--s2)' }}>
-          <ModeGrid modes={FEATURED_MODES} busy={busy} onPick={launch} />
+          <ModeGrid modes={FEATURED_MODES} busy={busy} blocked={blocked} onPick={launch} />
           {showMore && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
             >
-              <ModeGrid modes={MORE_MODES} busy={busy} onPick={launch} />
+              <ModeGrid modes={MORE_MODES} busy={busy} blocked={blocked} onPick={launch} />
             </motion.div>
           )}
         </div>
@@ -297,7 +338,7 @@ export function Home() {
         <Section title="Join with a code">
           <form
             className="row"
-            onSubmit={async (e) => {
+            onSubmit={(e) => {
               e.preventDefault();
               tap();
               const trimmed = code.trim().toUpperCase();
@@ -305,8 +346,9 @@ export function Home() {
                 toast('warn', 'Room codes are four characters');
                 return;
               }
-              const joined = await joinRoom(trimmed);
-              if (joined) setCode('');
+              void joinRoom(trimmed).then((joined) => {
+                if (joined) setCode('');
+              });
             }}
           >
             <input
@@ -324,7 +366,7 @@ export function Home() {
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
             />
-            <button className="btn btn--primary" type="submit">
+            <button className="btn btn--primary" type="submit" disabled={!connected}>
               Join
             </button>
           </form>
@@ -339,6 +381,7 @@ export function Home() {
               </span>
               <button
                 className="btn btn--ghost btn--sm"
+                disabled={!connected}
                 onClick={() => {
                   unlockAudio();
                   refreshLobby();
@@ -349,13 +392,7 @@ export function Home() {
             </div>
           }
         >
-          {publicRooms.length === 0 ? (
-            <EmptyState
-              icon={<ModeIcon name="search" size={20} />}
-              title="Nothing public right now"
-              hint="Host a game and it shows up here."
-            />
-          ) : (
+          {publicRooms.length > 0 ? (
             // Capped so a busy night scrolls inside the list rather than
             // pushing the rest of the page off the screen.
             <div className="col" style={{ gap: 'var(--s1)', maxHeight: 152, overflowY: 'auto' }}>
@@ -366,6 +403,7 @@ export function Home() {
                   key={room.code}
                   type="button"
                   className="row"
+                  disabled={!connected}
                   onClick={() => {
                     tap();
                     void joinRoom(room.code);
@@ -400,6 +438,28 @@ export function Home() {
                 </button>
               ))}
             </div>
+          ) : !connected ? (
+            <EmptyState
+              icon={<ModeIcon name="globe" size={20} />}
+              title="Not connected"
+              hint="Open games appear here once the connection is back."
+            />
+          ) : !lobbyAnswered ? (
+            <div
+              className="row"
+              style={{ gap: 'var(--s2)', padding: 'var(--s5)', justifyContent: 'center' }}
+            >
+              <Spinner />
+              <span className="faint thin" style={{ fontSize: 13 }}>
+                Looking for open games
+              </span>
+            </div>
+          ) : (
+            <EmptyState
+              icon={<ModeIcon name="search" size={20} />}
+              title="Nothing public right now"
+              hint="Host a game and it shows up here."
+            />
           )}
         </Section>
       </div>
@@ -436,10 +496,12 @@ export function Home() {
 function ModeGrid({
   modes,
   busy,
+  blocked,
   onPick,
 }: {
   modes: ModeDescriptor[];
   busy: GameMode | null;
+  blocked: boolean;
   onPick: (mode: GameMode, viaQuickplay: boolean) => void;
 }) {
   return (
@@ -451,17 +513,17 @@ function ModeGrid({
         <button
           key={mode.id}
           type="button"
-          disabled={busy !== null}
+          disabled={blocked}
           onClick={() => onPick(mode.id, false)}
           // The written-out description still exists, it just lives on hover.
           title={mode.tagline}
           className="panel panel--interactive col"
           style={{
             padding: 'var(--s3)',
-            gap: 2,
+            gap: 'var(--s1)',
             textAlign: 'left',
             alignItems: 'stretch',
-            opacity: busy !== null && busy !== mode.id ? 0.5 : 1,
+            opacity: blocked && busy !== mode.id ? 0.5 : 1,
           }}
         >
           <div className="row" style={{ gap: 'var(--s2)' }}>
@@ -488,15 +550,21 @@ function ModeGrid({
 function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const createRoom = useStore((s) => s.createRoom);
   const toast = useStore((s) => s.toast);
+  const connected = useStore((s) => s.connected);
 
   const [settings, setSettings] = useState<GameSettings>(() => defaultsForMode('classic'));
   const [presets, setPresets] = useState<{ mine: PresetSummary[]; featured: PresetSummary[] }>({
     mine: [],
     featured: [],
   });
+  const [presetStatus, setPresetStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // Bumped by Try again so the fetch effect re-runs; keeps one copy of it.
+  const [presetReload, setPresetReload] = useState(0);
   const [presetName, setPresetName] = useState('');
   const [presetPublic, setPresetPublic] = useState(false);
   const [shareCode, setShareCode] = useState('');
+  const [loadingShared, setLoadingShared] = useState(false);
+  const [savingPreset, setSavingPreset] = useState(false);
   const [creating, setCreating] = useState(false);
   // Bumped whenever a preset replaces the whole settings object. The editor
   // seeds its own drafts (the word-list textarea, the Advanced disclosure)
@@ -505,11 +573,24 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
 
   useEffect(() => {
     if (!open) return;
+    // Closing and reopening while a slow response is still out would otherwise
+    // let the stale one land on top of the fresh one.
+    let live = true;
+    setPresetStatus('loading');
     api
       .presets()
-      .then(setPresets)
-      .catch(() => undefined);
-  }, [open]);
+      .then((res) => {
+        if (!live) return;
+        setPresets(res);
+        setPresetStatus('ready');
+      })
+      .catch(() => {
+        if (live) setPresetStatus('error');
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, presetReload]);
 
   function applyPreset(next: GameSettings) {
     setSettings(next);
@@ -526,6 +607,8 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
     );
   }
 
+  const savedList = [...presets.mine, ...presets.featured];
+
   return (
     <Modal
       open={open}
@@ -539,13 +622,15 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
           </button>
           <button
             className="btn btn--primary"
-            disabled={creating}
-            onClick={async () => {
+            disabled={creating || !connected}
+            onClick={() => {
               play('click');
               setCreating(true);
-              const code = await createRoom(settings);
-              setCreating(false);
-              if (code) onClose();
+              void createRoom(settings)
+                .then((code) => {
+                  if (code) onClose();
+                })
+                .finally(() => setCreating(false));
             }}
           >
             {creating ? <Spinner /> : null}
@@ -557,13 +642,33 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
       <div className="stack">
         <div className="col" style={{ gap: 'var(--s2)' }}>
           <div className="eyebrow">Saved setups</div>
-          {presets.mine.length === 0 && presets.featured.length === 0 ? (
+          {presetStatus === 'loading' ? (
+            <div className="row" style={{ gap: 'var(--s2)' }}>
+              <Spinner size={14} />
+              <span className="faint thin" style={{ fontSize: 13 }}>
+                Loading saved setups
+              </span>
+            </div>
+          ) : presetStatus === 'error' ? (
+            <div className="row" style={{ gap: 'var(--s2)' }}>
+              <span className="faint thin" style={{ fontSize: 13 }}>
+                Could not load your saved setups.
+              </span>
+              <button
+                className="btn btn--ghost btn--sm"
+                type="button"
+                onClick={() => setPresetReload((n) => n + 1)}
+              >
+                Try again
+              </button>
+            </div>
+          ) : savedList.length === 0 ? (
             <p className="faint thin" style={{ margin: 0, fontSize: 13 }}>
               Nothing saved yet. Save one below and you get a share code for it.
             </p>
           ) : (
             <div className="row row--wrap" style={{ gap: 'var(--s1)' }}>
-              {[...presets.mine, ...presets.featured].map((preset) => (
+              {savedList.map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
@@ -592,17 +697,20 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
             <button
               className="btn"
               type="button"
-              disabled={!shareCode.trim()}
-              onClick={async () => {
-                try {
-                  const preset = await api.loadPreset(shareCode.trim());
-                  applyPreset(preset.settings);
-                  toast('success', `Loaded "${preset.name}"`);
-                } catch {
-                  toast('error', 'No preset with that code');
-                }
+              disabled={!shareCode.trim() || loadingShared}
+              onClick={() => {
+                setLoadingShared(true);
+                void api
+                  .loadPreset(shareCode.trim())
+                  .then((preset) => {
+                    applyPreset(preset.settings);
+                    toast('success', `Loaded "${preset.name}"`);
+                  })
+                  .catch(() => toast('error', 'No preset with that code'))
+                  .finally(() => setLoadingShared(false));
               }}
             >
+              {loadingShared ? <Spinner size={14} /> : null}
               Load
             </button>
           </div>
@@ -617,7 +725,7 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
             <input
               className="input grow"
               aria-label="Preset name"
-              placeholder="name it, e.g. friday night carnage"
+              placeholder="Name this setup"
               value={presetName}
               maxLength={48}
               onChange={(e) => setPresetName(e.target.value)}
@@ -638,18 +746,24 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
             <button
               className="btn"
               type="button"
-              disabled={!presetName.trim()}
-              onClick={async () => {
-                try {
-                  const saved = await api.savePreset(presetName.trim(), settings, presetPublic);
-                  setPresetName('');
-                  setPresets((p) => ({ ...p, mine: [saved, ...p.mine] }));
-                  toast('success', `Saved. Share code ${saved.shareCode}`);
-                } catch {
-                  toast('error', 'Could not save that preset');
-                }
+              disabled={!presetName.trim() || savingPreset}
+              onClick={() => {
+                setSavingPreset(true);
+                void api
+                  .savePreset(presetName.trim(), settings, presetPublic)
+                  .then((saved) => {
+                    setPresetName('');
+                    setPresets((p) => ({ ...p, mine: [saved, ...p.mine] }));
+                    // A save proves the endpoint is up, so clear an earlier
+                    // load failure instead of hiding the list we just added to.
+                    setPresetStatus('ready');
+                    toast('success', `Saved. Share code ${saved.shareCode}`);
+                  })
+                  .catch(() => toast('error', 'Could not save that preset'))
+                  .finally(() => setSavingPreset(false));
               }}
             >
+              {savingPreset ? <Spinner size={14} /> : null}
               Save preset
             </button>
           </div>

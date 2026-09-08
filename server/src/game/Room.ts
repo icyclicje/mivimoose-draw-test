@@ -135,6 +135,7 @@ export class Room {
     round: number;
     word: string;
     rank: number;
+    stolen: boolean;
     isHint: boolean;
     msIntoRound: number;
   }[] = [];
@@ -890,6 +891,9 @@ export class Room {
           round: this.round,
           word: guess.word,
           rank: guess.rank,
+          // Kept so a replay can show which words were already claimed when
+          // they were played — the interesting part of two people racing.
+          stolen: guess.stolenFrom !== null,
           isHint: guess.isHint,
           msIntoRound: guess.at,
         });

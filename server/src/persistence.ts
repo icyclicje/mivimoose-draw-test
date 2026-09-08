@@ -79,6 +79,7 @@ export async function recordMatch(room: Room, result: MatchResult): Promise<Matc
           round: g.round,
           word: g.word,
           rank: g.rank,
+          stolen: g.stolen,
           isHint: g.isHint,
           msIntoRound: g.msIntoRound,
         })),

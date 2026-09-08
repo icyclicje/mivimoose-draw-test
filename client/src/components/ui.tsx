@@ -219,7 +219,9 @@ export function Toggle({
             width: 16,
             height: 16,
             borderRadius: '50%',
-            background: '#fff',
+            // The page ground, not white: on the light themes a white knob on a
+            // pale accent track disappears completely.
+            background: 'var(--bg)',
             marginLeft: checked ? 14 : 0,
           }}
         />
@@ -269,7 +271,7 @@ export function Segmented<T extends string>({
               borderRadius: 4,
               fontSize: 13,
               fontWeight: active ? 800 : 600,
-              color: active ? '#fff' : 'var(--text-dim)',
+              color: active ? 'var(--bg)' : 'var(--text-dim)',
               whiteSpace: 'nowrap',
             }}
           >
@@ -389,7 +391,10 @@ export function Modal({
             display: 'grid',
             placeItems: 'center',
             padding: 16,
-            background: 'rgba(8, 12, 22, 0.8)',
+            // Derived from the theme so a light page dims to a light grey
+            // rather than being covered in near-black.
+            background: 'color-mix(in srgb, var(--bg) 72%, transparent)',
+            backdropFilter: 'blur(3px)',
           }}
         >
           <motion.div

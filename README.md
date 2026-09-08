@@ -101,6 +101,72 @@ Found it in 19 guesses · #4 today
 It reports how many guesses landed in each heat band and nothing else, so
 pasting it into a group chat spoils nothing for anyone who has not played.
 
+## Friends
+
+Add people by name, accept or decline requests, and invite a friend straight
+into whatever lobby you are sitting in. Friends who are online show what they
+are doing and, when they are in a public room, a button to join it.
+
+Requests are one row, not two: pressing add when someone has already added you
+accepts their request rather than creating a second one pointing the other way.
+Invites only work between actual friends, so they cannot be used to spam
+strangers. Guest accounts can play everything else but cannot use friends —
+there is no stable identity behind them to befriend.
+
+## Ranks
+
+Quick match is the ranked ladder, so every game there moves your Elo. The number
+itself is shown as a tier, because "1,347" means nothing on its own:
+
+| | | | |
+| --- | --- | --- | --- |
+| Drifter | Novice | Reader | Scout |
+| Tracker | Adept | Oracle | Sage |
+| **Lexicon** | | | |
+
+Your profile shows how far into your tier you are and what the next one costs.
+
+## Reading someone's path
+
+The interesting part of a finished game is not the score, it is the route. Click
+any player on the results screen — or any of your own recent games on your
+profile — and you get every word they played, **in the order they played it**,
+with the rank and the clock. Hints and stolen words are marked.
+
+Wrong turns are the point. A path that goes `trombone → harbor` tells a better
+story than "2 guesses" ever could.
+
+## Sound
+
+Effects on, music off, both toggleable from the header. Everything is
+synthesised with WebAudio oscillators rather than shipped as files: a music loop
+and a set of samples would be a megabyte or two on every cold load of a Discord
+Activity, and this way the "getting closer" cue can actually track your rank
+instead of picking from three canned clips.
+
+Nothing plays until you have clicked something, because browsers suspend audio
+until a gesture and an unhandled resume is a console error on every load.
+
+## Moderators and statistics
+
+`Silk`, `cinnamings`, `GERG4495` and `FarmMerchant` are granted the moderator
+role on Discord sign-in, matched on username or display name. The role unlocks
+one thing: a statistics page with a concurrency graph over a day, a week or a
+month, plus peak and lifetime totals. The server takes a headcount every two
+minutes; each point on the graph is the peak within its bucket, because an
+average flattens exactly the spikes the graph exists to show.
+
+Everyone else gets a 403 and a short explanation.
+
+## FAQ, terms and privacy
+
+Reachable from the header and the home screen. The FAQ answers the questions
+this game actually generates — why a word was rejected, what the colours mean,
+whether plurals count, how the tiers work. The privacy page is specific rather
+than boilerplate, because the data model is right here: Discord id, name and
+avatar hash, your matches and guesses, and aggregate player counts. No email, no
+analytics, no ads.
+
 ## Getting it running
 
 ```bash
@@ -266,10 +332,19 @@ npm run smoke:duel       # two players: stealing, morphology, hints, chat filter
 npm run smoke:lobby      # ten players + spectator overflow, full standings
 npm run smoke:modes      # elimination, sudden death turn order and strikes, co-op budget
 npm run smoke:features   # guests, quick-match auto-start, replayed guesses, daily share
+npm run smoke:social     # friends, invites, presence, ready-up, stealing, ends-on-find
+npm run smoke:stats      # the moderator gate and match replay paths
+```
+
+`smoke:stats` promotes a throwaway guest to moderator directly in the database,
+so it needs `DATABASE_URL` pointing at the same file the server is using:
+
+```bash
+DATABASE_URL="file:$PWD/server/prisma/arena.db" npm run smoke:stats
 ```
 
 They run against a live server and use deterministic single-word matches
-(`customWords: ['ocean']`) so assertions can check exact ranks. 68 checks total.
+(`customWords: ['ocean']`) so assertions can check exact ranks. 109 checks total.
 
 ## Configuration
 

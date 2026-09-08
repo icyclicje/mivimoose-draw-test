@@ -179,6 +179,14 @@ export function createSocketServer(httpServer: HttpServer) {
     refreshPresence();
     nudgeFriends();
 
+    // Send the headcount straight away rather than making the home screen show
+    // "quiet right now" for up to ten seconds while it waits for the first
+    // scheduled broadcast — including to the person who just arrived.
+    {
+      const stats = manager.stats();
+      io.emit('presence', { online: onlineCount(), inGame: stats.players, rooms: stats.rooms });
+    }
+
     // A reconnect drops straight back into whatever match was in progress.
     const existing = currentRoom();
     if (existing) enterRoom(existing);

@@ -31,7 +31,8 @@
     "db:generate": "prisma generate --schema server/prisma/schema.prisma",
     "setup:words": "npm run setup:words -w @mivimoose/server",
     "smoke:features": "node scripts/smoke-features.mjs",
-    "smoke:social": "node scripts/smoke-social.mjs"
+    "smoke:social": "node scripts/smoke-social.mjs",
+    "smoke:stats": "node scripts/smoke-stats.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
