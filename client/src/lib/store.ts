@@ -28,7 +28,15 @@ import {
 import { setApiToken } from './api';
 import { play } from './sound';
 
-export type Tab = 'play' | 'daily' | 'ranks' | 'profile' | 'friends' | 'stats' | 'info';
+export type Tab =
+  | 'play'
+  | 'daily'
+  | 'ranks'
+  | 'profile'
+  | 'friends'
+  | 'stats'
+  | 'info'
+  | 'settings';
 
 export interface Toast {
   id: number;

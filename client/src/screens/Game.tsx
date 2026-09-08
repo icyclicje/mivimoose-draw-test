@@ -102,7 +102,7 @@ export function Game({ room }: { room: RoomState }) {
   // go and find the conversation before they can join it, and a match is short
   // enough that almost nobody does. It still folds away for anyone who wants
   // the board on its own.
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [watching, setWatching] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 

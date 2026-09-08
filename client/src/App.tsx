@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { Wordmark } from './components/Logo';
 import { ModeIcon } from './components/ModeIcon';
 import { SoundToggle } from './components/SoundToggle';
-import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { Avatar, Toasts } from './components/ui';
 import { Boot } from './screens/Boot';
 import { Daily } from './screens/Daily';
@@ -15,6 +14,7 @@ import { Leaderboard } from './screens/Leaderboard';
 import { Lobby } from './screens/Lobby';
 import { Profile } from './screens/Profile';
 import { Results } from './screens/Results';
+import { Settings } from './screens/Settings';
 import { Statistics } from './screens/Statistics';
 import { setActivity } from './lib/discord';
 import { cx, modeLabel } from './lib/format';
@@ -197,7 +197,15 @@ export default function App() {
             <ModeIcon name="info" size={15} />
           </button>
           <SoundToggle />
-          <ThemeSwitcher />
+          <button
+            className={cx('btn btn--ghost btn--sm', tab === 'settings' && 'tab--active')}
+            style={{ padding: '0 var(--s2)' }}
+            title="Settings: themes, layout and sound"
+            aria-label="Settings"
+            onClick={() => goTo('settings')}
+          >
+            <ModeIcon name="gear" size={15} />
+          </button>
         </div>
 
         {user && (
@@ -254,6 +262,7 @@ export default function App() {
           {tab === 'profile' && <Profile />}
           {tab === 'stats' && <Statistics />}
           {tab === 'info' && <Info />}
+          {tab === 'settings' && <Settings />}
         </motion.div>
       </div>
 

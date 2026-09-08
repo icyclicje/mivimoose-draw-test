@@ -25,16 +25,8 @@ function plural(n: number, one: string, many: string): string {
 }
 
 /* Five rows, then it scrolls. The board underneath is the point of the page,
-   so today's standings are never allowed to push it off screen. Trimmed from
-   seven to pay for the totals strip, which is the more valuable row. */
-const STANDINGS_MAX = 140;
-
-/* The board is no longer open-ended: GuessList shows the ten closest and puts
-   everything else behind a "See all" button. So this cap only has to clear that
-   bounded height (pinned row, divider, ten rows, the button), and the old
-   six-row value cut it in half. That hid the button inside the scroller, which
-   is the one control that must not need scrolling to find. */
-const BOARD_MAX = 470;
+   so today's standings are never allowed to push it off screen. */
+const STANDINGS_MAX = 176;
 
 /* The heat bands in the words a player needs, rather than the words the scoring
    code uses. Thresholds mirror BAND_THRESHOLDS in shared/scoring.ts, and the
@@ -398,15 +390,10 @@ export function Daily() {
       <Section title="Your board" action={state.solved ? undefined : shareBar}>
         <div className="col" style={{ gap: 'var(--s3)' }}>
           {!state.solved && manualBox}
-          {/* tabIndex, because a capped scroller a keyboard cannot reach hides
-              every guess past the sixth from anyone not using a mouse. */}
-          <div
-            ref={boardRef}
-            tabIndex={0}
-            role="group"
-            aria-label="Your guesses, closest first"
-            style={{ maxHeight: BOARD_MAX, overflowY: 'auto' }}
-          >
+          {/* No height cap. GuessList shows the ten closest and puts the rest
+              behind "See all", so the board is already bounded and squeezing it
+              again only made the rows harder to read as the round went on. */}
+          <div ref={boardRef} role="group" aria-label="Your guesses, closest first">
             <GuessList
               guesses={state.guesses}
               latestId={latestId}

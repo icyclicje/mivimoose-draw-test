@@ -774,3 +774,36 @@ textarea.input {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--s3) var(--s4);
 }
+
+/* ------------------------------------------------------------------ *
+ * Density
+ *
+ * One attribute on <html>, set before first paint by main.tsx. Condensed is
+ * the default and the shipped baseline; expanded loosens the same values
+ * rather than defining a second layout, so a screen can never be built for
+ * one and rendered in the other.
+ * ------------------------------------------------------------------ */
+
+[data-density='condensed'] .guess {
+  height: 34px;
+}
+[data-density='condensed'] .page {
+  gap: var(--s4);
+  padding-top: var(--s4);
+}
+[data-density='condensed'] .roster__item {
+  height: 32px;
+}
+
+[data-density='expanded'] .guess {
+  height: 42px;
+}
+[data-density='expanded'] .guess__word {
+  font-size: 17px;
+}
+[data-density='expanded'] .page {
+  gap: var(--s6);
+}
+[data-density='expanded'] .roster__item {
+  height: 38px;
+}

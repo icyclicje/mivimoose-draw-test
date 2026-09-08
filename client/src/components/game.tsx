@@ -68,11 +68,6 @@ export function GuessRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
       className={cx('guess', found && 'guess--found', guess.repeat && 'guess--repeat')}
-      // Shorter than the stylesheet default so a few more rows clear the fold.
-      // Text sizes are untouched: 17px in a 34px box still has room to breathe.
-      // The pinned copy keeps its full height, because it answers "what did
-      // that word do?" and should not read as just another line in the list.
-      style={{ height: pinned ? undefined : 34 }}
     >
       <motion.div
         className="guess__bar"
@@ -297,22 +292,9 @@ export function GuessList({
         </div>
       )}
 
-      {/* Ten rows is roughly 380px, which on a 700px window pushed the chat
-          drawer below the fold. Capping the list keeps the page a fixed height
-          whatever the round does, and the "See all" button deliberately sits
-          outside this scroller so the route to the full list is never the thing
-          you have to scroll to find. */}
       <ul
         className="col"
-        style={{
-          margin: 0,
-          padding: 0,
-          gap: 'var(--s1)',
-          listStyle: 'none',
-          minHeight: 0,
-          maxHeight: 'min(38vh, 280px)',
-          overflowY: 'auto',
-        }}
+        style={{ margin: 0, padding: 0, gap: 'var(--s1)', listStyle: 'none', minHeight: 0 }}
       >
         <AnimatePresence initial={false}>
           {top.map((guess) => (
