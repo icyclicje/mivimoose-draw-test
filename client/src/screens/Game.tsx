@@ -113,6 +113,11 @@ export function Game({ room }: { room: RoomState }) {
   );
   const watched = canWatch ? (others.find((p) => p.user.id === watching) ?? null) : null;
   const guesses: GuessResult[] = watched?.guesses ?? me?.guesses ?? [];
+  // Both the tab strip and the line naming whose list you are reading only
+  // mean anything once there is more than one board to be on. Rendering the
+  // line the rest of the time spends a row of a short screen on the words
+  // "your board" directly above your board.
+  const showBoards = canWatch && others.length > 0;
 
   const standings = useMemo(
     () =>
@@ -327,7 +332,7 @@ export function Game({ room }: { room: RoomState }) {
           rows. StatusOverlay reserves its height so the list never jumps as
           lines come and go, and at page spacing that reserved band reads as a
           hole whenever nobody is doing anything — hence the tighter gaps. */}
-      <div className="col" style={{ gap: 'var(--s2)', minWidth: 0 }}>
+      <div className="col" style={{ gap: 'var(--s1)', minWidth: 0 }}>
         {/* The word box. Deliberately the loudest thing on the page. */}
         <form onSubmit={submit} className="col" style={{ gap: 'var(--s2)' }}>
           <div className="row">
@@ -463,8 +468,19 @@ export function Game({ room }: { room: RoomState }) {
               is the only time the other boards are on the client at all. It
               scrolls sideways like the roster: wrapped to a second row, the
               tabs push the list they belong to off a short screen. */}
-          {canWatch && others.length > 0 && (
-            <div className="row" style={{ gap: 'var(--s1)', overflowX: 'auto', paddingBottom: 2 }}>
+          {showBoards && (
+            <div
+              className="row"
+              style={{
+                gap: 'var(--s1)',
+                overflowX: 'auto',
+                // Hidden the way .roster hides its own: the strip has to scroll,
+                // but a permanent 8px scrollbar under it is another band of
+                // chrome on a screen with none to spare.
+                scrollbarWidth: 'none',
+                paddingBottom: 2,
+              }}
+            >
               <button
                 type="button"
                 className={cx('chip', watching === null && 'chip--brand')}
@@ -507,46 +523,55 @@ export function Game({ room }: { room: RoomState }) {
               like your own — so the owner is named here, with the two numbers
               that say how their round is going. minHeight keeps the line the
               same height on both boards so switching does not shift the list. */}
-          <div className="row" style={{ gap: 'var(--s2)', minWidth: 0, minHeight: 26 }}>
-            {watched ? (
-              <>
-                <span className="eyebrow" style={{ flex: 'none' }}>
-                  watching
-                </span>
-                <Avatar user={watched.user} size={24} />
-                <span className="bold truncate">{watched.user.displayName}</span>
-                <span className="grow" />
-                <span className="mono faint" style={{ fontSize: 12, flex: 'none' }}>
-                  {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
-                </span>
-                <span
-                  className="mono bold"
-                  style={{
-                    fontSize: 13,
-                    flex: 'none',
-                    // Same banding as the bars and the roster, so a rank reads
-                    // the same colour wherever it appears.
-                    color:
-                      watched.bestRank !== null
-                        ? bandColor(bandForRank(watched.bestRank))
-                        : 'var(--text-faint)',
-                  }}
-                >
-                  {formatAway(watched.bestRank)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="faint" style={{ fontSize: 12 }}>
-                  your board
-                </span>
-                <span className="grow" />
-                <span className="mono faint" style={{ fontSize: 12, flex: 'none' }}>
-                  {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
-                </span>
-              </>
-            )}
-          </div>
+          {showBoards && (
+            <div className="row" style={{ gap: 'var(--s2)', minWidth: 0, minHeight: 26 }}>
+              {watched ? (
+                <>
+                  <span className="eyebrow" style={{ flex: 'none' }}>
+                    watching
+                  </span>
+                  <Avatar user={watched.user} size={24} />
+                  {/* Titled as well as truncated. This line is the answer to
+                      "whose guesses am I reading", so a name clipped by a long
+                      one has to be recoverable without changing tabs. */}
+                  <span className="bold truncate" title={watched.user.displayName}>
+                    {watched.user.displayName}
+                  </span>
+                  <span className="grow" />
+                  {/* Both numbers keep flex none: the name is the only part of
+                      this line that may lose characters. */}
+                  <span className="mono faint" style={{ fontSize: 12, flex: 'none' }}>
+                    {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
+                  </span>
+                  <span
+                    className="mono bold"
+                    style={{
+                      fontSize: 13,
+                      flex: 'none',
+                      // Same banding as the bars and the roster, so a rank reads
+                      // the same colour wherever it appears.
+                      color:
+                        watched.bestRank !== null
+                          ? bandColor(bandForRank(watched.bestRank))
+                          : 'var(--text-faint)',
+                    }}
+                  >
+                    {formatAway(watched.bestRank)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="faint" style={{ fontSize: 12 }}>
+                    your board
+                  </span>
+                  <span className="grow" />
+                  <span className="mono faint" style={{ fontSize: 12, flex: 'none' }}>
+                    {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
           <GuessList
             guesses={guesses}
             // The pulse and the last-submitted row belong to your own board; on

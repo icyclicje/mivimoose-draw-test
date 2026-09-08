@@ -138,14 +138,58 @@ story than "2 guesses" ever could.
 
 ## Sound
 
-Effects on, music off, both toggleable from the header. Everything is
-synthesised with WebAudio oscillators rather than shipped as files: a music loop
-and a set of samples would be a megabyte or two on every cold load of a Discord
-Activity, and this way the "getting closer" cue can actually track your rank
-instead of picking from three canned clips.
+Effects on, music off by default, both toggleable from the header. Everything is
+synthesised with WebAudio oscillators rather than shipped as files — a music loop
+plus samples would be a megabyte or two on every cold load of a Discord Activity,
+and this way the "getting closer" cue tracks your actual rank instead of picking
+from three canned clips.
 
-Nothing plays until you have clicked something, because browsers suspend audio
-until a gesture and an unhandled resume is a console error on every load.
+Two music beds, switched on the room phase rather than the tab, so opening the
+leaderboard mid-match does not change the music:
+
+- **menu** — slow, open, long gaps. Meant to go unnoticed.
+- **game** — the same restraint with a steady pulse under it. Competitive
+  without being tense enough to distract from reading words.
+
+Both sit in A minor pentatonic so switching between them mid-session never
+clashes.
+
+Nothing plays until you have clicked something: browsers suspend audio until a
+gesture, and an unhandled resume is a console error on every load.
+
+## Words an opponent has taken
+
+In public games and duels, a word somebody already played is **closed** to you.
+You are told who took it and nothing else — no rank, not even whether it was
+warm — and the guess is not charged, because a word you are not allowed to play
+is not a turn you took.
+
+That is a setting, not a law. Turn `lockClaimedWords` off in a custom game and
+the word stays playable; the row is simply marked with who got there first. The
+two behaviours read differently on purpose:
+
+| | |
+| --- | --- |
+| Your own repeat | "You already guessed this word." — free, re-pins the original row |
+| Someone else's word, lock off | "Alder guessed this word before you." — you still get the rank |
+| Someone else's word, lock on | refused, names them, costs nothing |
+
+## Forms and spellings
+
+Type a form the 200,000-word list does not hold and it falls back to the base
+word, and the row tells you: `harborings` ranks as `harboring`, noted as
+"typed harborings".
+
+The guard that matters is the one that does **not** fire. Anything already in the
+list is ranked exactly as typed — `harbours`, `colour`, `organise` and `leaves`
+are all their own entries with their own ranks, and nothing rewrites them. A
+word with two accepted spellings keeps both.
+
+Separately, a tier of *thin* words is refused outright: `very`, `important`,
+`different`, `basically` and about a hundred more. They are not rare or rude,
+they sit near everything, so they rank middling against any secret and teach you
+nothing. Real descriptors — `cold`, `heavy`, `sharp` — stay guessable, because
+those are genuine signal about a genuine property.
 
 ## Moderators and statistics
 
@@ -334,6 +378,7 @@ npm run smoke:modes      # elimination, sudden death turn order and strikes, co-
 npm run smoke:features   # guests, quick-match auto-start, replayed guesses, daily share
 npm run smoke:social     # friends, invites, presence, ready-up, stealing, ends-on-find
 npm run smoke:stats      # the moderator gate and match replay paths
+npm run smoke:rules      # closed words, word length, thin words, form fallback, daily co-op
 ```
 
 `smoke:stats` promotes a throwaway guest to moderator directly in the database,
@@ -344,7 +389,7 @@ DATABASE_URL="file:$PWD/server/prisma/arena.db" npm run smoke:stats
 ```
 
 They run against a live server and use deterministic single-word matches
-(`customWords: ['ocean']`) so assertions can check exact ranks. 109 checks total.
+(`customWords: ['ocean']`) so assertions can check exact ranks. 139 checks total.
 
 ## Configuration
 
