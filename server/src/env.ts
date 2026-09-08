@@ -95,6 +95,39 @@ function resolveSessionSecret(explicit: string | undefined): SessionSecret {
   }
 }
 
+/**
+ * Prisma does not go through any of this.
+ *
+ * `env("DATABASE_URL")` in schema.prisma is read from `process.env` by the
+ * generated client, so a default that only exists in our zod schema leaves
+ * PrismaClient with nothing and every query fails at runtime. Write the
+ * resolved value back so there is one answer for both.
+ *
+ * Must agree with scripts/ensure-database-url.mjs, which does the same job for
+ * the Prisma CLI during build and schema sync.
+ */
+function ensureDatabaseUrl(configured: string): string {
+  const existing = process.env.DATABASE_URL?.trim();
+  if (existing) return existing;
+
+  const volume = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  const resolved = volume
+    ? `file:${path.join(volume, 'db', 'arena.db').split(path.sep).join('/')}`
+    : configured;
+
+  if (volume) {
+    try {
+      fs.mkdirSync(path.join(volume, 'db'), { recursive: true });
+    } catch {
+      // Falls back to whatever the schema default resolves to.
+    }
+  }
+
+  process.env.DATABASE_URL = resolved;
+  return resolved;
+}
+
+const databaseUrl = ensureDatabaseUrl(raw.DATABASE_URL);
 const sessionSecret = resolveSessionSecret(raw.SESSION_SECRET);
 
 const discordClientId = raw.DISCORD_CLIENT_ID || null;
@@ -104,6 +137,7 @@ const discordEnabled = Boolean(discordClientId && discordClientSecret);
 
 export const env = {
   ...raw,
+  DATABASE_URL: databaseUrl,
   SESSION_SECRET: sessionSecret.value,
   DISCORD_CLIENT_ID: discordClientId,
   DISCORD_CLIENT_SECRET: discordClientSecret,

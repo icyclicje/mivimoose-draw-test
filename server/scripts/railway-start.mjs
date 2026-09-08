@@ -19,6 +19,7 @@ import { spawnSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureDatabaseUrl } from './ensure-database-url.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..'); // server/
@@ -64,6 +65,10 @@ if (process.env.EMBEDDING_PROVIDER !== 'topic') {
 // fail the deploy loudly rather than silently drop a column of real data. Run
 // it by hand (`railway run npm run db:push -- --accept-data-loss`) when you
 // actually mean it.
+// Before any Prisma command: without this, a deployment with no variables set
+// fails schema validation here and never reaches the server.
+ensureDatabaseUrl();
+
 console.log('[railway-start] syncing database schema');
 run('npx', ['prisma', 'db', 'push', '--schema', 'prisma/schema.prisma', '--skip-generate']);
 

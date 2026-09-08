@@ -377,6 +377,12 @@ environment variables at all and you get a working game: guest accounts, every
 mode, the daily, friends, leaderboards. The [`railway.toml`](railway.toml) wires
 up the build and start commands, so that really is the whole of it.
 
+The database is handled for you too: with no `DATABASE_URL`, SQLite lands on the
+volume at `$RAILWAY_VOLUME_MOUNT_PATH/db/arena.db`, or in `server/data/` without
+one. That matters because the Prisma CLI reads `DATABASE_URL` straight from the
+environment — a default buried in application code is invisible to
+`prisma db push`, which runs on every boot.
+
 What you give up by setting nothing:
 
 - **Discord sign-in is off.** Everyone plays as a guest. Guests keep stats and
@@ -406,7 +412,7 @@ warn  SESSION_SECRET not set — generated one and saved it to /data/.session-se
 
    | Key | Value | Why |
    | --- | --- | --- |
-   | `DATABASE_URL` | `file:${{RAILWAY_VOLUME_MOUNT_PATH}}/db/arena.db` | keeps accounts and match history on the volume |
+   | `DATABASE_URL` | `file:${{RAILWAY_VOLUME_MOUNT_PATH}}/db/arena.db` | this is already the default when a volume is attached, so setting it is only about being explicit |
    | `CORS_ORIGINS` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` | same-origin requests are allowed automatically, but this covers anything else you point at it |
    | `NODE_ENV` | `production` | |
    | `SESSION_SECRET` | a random 32+ character string | sessions then survive a redeploy and scale past one instance |

@@ -14,3 +14,5 @@ client/.vite/
 coverage/
 # Generated when SESSION_SECRET is unset. Signs every session token.
 server/data/.session-secret
+# Written by scripts/ensure-database-url.mjs when DATABASE_URL is unset.
+server/prisma/.env
