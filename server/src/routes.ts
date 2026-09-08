@@ -472,6 +472,7 @@ export function createApiRouter() {
       stolenFrom: null,
       repeat: false,
       isHint: false,
+      normalizedFrom: resolved.normalizedFrom,
     };
     guesses.push(result);
 

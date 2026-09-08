@@ -119,11 +119,14 @@ async function main() {
     again.data?.id === first.data?.id && again.data?.rank === first.data?.rank,
   );
 
+  // Classic closes claimed words, so another player hitting the same word is
+  // refused rather than ranked — and told whose it was. That distinction is the
+  // point: your own replay is free, theirs is a closed door.
   const steal = await ask(bSock, 'game:guess', { word: 'anchor' });
   check(
-    'another player replaying it is a steal, not a repeat',
-    steal.data?.repeat === false && steal.data?.stolenFrom?.displayName === a.user.displayName,
-    JSON.stringify(steal.data?.stolenFrom),
+    'another player hitting the same word is closed out, not given a repeat',
+    !steal.ok && steal.code === 'already-guessed' && steal.error?.includes(a.user.displayName),
+    steal.error ?? JSON.stringify(steal.data),
   );
 
   aSock.close();

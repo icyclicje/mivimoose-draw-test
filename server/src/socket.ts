@@ -19,6 +19,7 @@ import { log } from './log.js';
 import { GuessRejected, type Room } from './game/Room.js';
 import { RoomManager } from './game/RoomManager.js';
 import { recordMatch } from './persistence.js';
+import { dailyWordFor, todayKey } from './engine/lexicon.js';
 import {
   areFriends,
   clearPresence,
@@ -261,6 +262,31 @@ export function createSocketServer(httpServer: HttpServer) {
           guildId: data.guildId,
           managed: true,
         });
+      enterRoom(room);
+      ack?.(ok({ code: room.code }));
+    });
+
+    /**
+     * A co-op room on today's daily word. Created here rather than through
+     * room:create so the secret is picked server-side and never travels in the
+     * settings the host can read.
+     */
+    socket.on('room:dailyCoop', (ack?: (r: Ack<{ code: string }>) => void) => {
+      leaveCurrent();
+      const room = manager.create({
+        host: user,
+        settings: {
+          ...defaultsForMode('coop'),
+          rounds: 1,
+          // Generous: the point is to work it out together, not to race.
+          roundSeconds: 0,
+          teamGuessBudget: 120,
+          private: true,
+          ranked: false,
+        },
+        guildId: data.guildId,
+      });
+      room.forcedSecrets = [dailyWordFor(todayKey())];
       enterRoom(room);
       ack?.(ok({ code: room.code }));
     });

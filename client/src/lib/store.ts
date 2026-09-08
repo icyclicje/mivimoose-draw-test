@@ -86,6 +86,8 @@ interface AppState {
   createRoom: (settings: Partial<GameSettings>) => Promise<string | null>;
   joinRoom: (code: string, asSpectator?: boolean) => Promise<boolean>;
   quickplay: (mode: GameMode) => Promise<void>;
+  /** Opens a private co-op room on today's daily word and joins it. */
+  startDailyCoop: () => Promise<string | null>;
   joinInstanceRoom: (mode?: GameMode) => Promise<void>;
   leaveRoom: () => void;
   refreshLobby: () => void;
@@ -232,6 +234,18 @@ export const useStore = create<AppState>((set, get) => ({
     if (!socket) return;
     const res = await emit<{ code: string }>(socket, 'room:quickplay', { mode });
     if (!res.ok) get().toast('error', res.error ?? 'No games available');
+  },
+
+  async startDailyCoop() {
+    const socket = get().socket;
+    if (!socket) return null;
+    const res = await emit<{ code: string }>(socket, 'room:dailyCoop');
+    if (!res.ok) {
+      get().toast('warn', res.error ?? 'Could not open a co-op room');
+      return null;
+    }
+    set({ tab: 'play' });
+    return res.data?.code ?? null;
   },
 
   async joinInstanceRoom(mode) {

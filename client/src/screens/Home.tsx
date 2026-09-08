@@ -200,7 +200,9 @@ export function Home() {
         className="col"
         style={{ gap: 'var(--s2)' }}
       >
-        <div className="row row--between" style={{ gap: 'var(--s3)' }}>
+        {/* Wraps rather than letting the headline squeeze the count, which is
+            the half of this row that changes. */}
+        <div className="row row--between row--wrap" style={{ gap: 'var(--s3)' }}>
           <h1>Find the word before they do.</h1>
           <div className="row" style={{ gap: 'var(--s2)', flex: 'none' }}>
             <span
@@ -216,20 +218,30 @@ export function Home() {
                     : 'var(--surface-3)',
               }}
             />
-            <span className="col" style={{ gap: 0 }}>
-              {/* "0 playing now" reads as broken; "quiet right now" reads as
-                  true. And a headcount from before the socket dropped is worse
-                  than saying the connection is gone. */}
-              <span className="bold mono" style={{ fontSize: 15 }}>
+            {/* People mid-game are the number worth acting on, so that one
+                takes the big type. Online is everyone connected, most of them
+                sitting in menus. "0 in a game" would read as broken, hence the
+                two fallbacks. And a headcount from before the socket dropped is
+                worse than saying the connection is gone. The room total is not
+                here on purpose: Open lobbies below counts the rooms you can
+                actually join. */}
+            <span className="row" style={{ gap: 'var(--s2)', alignItems: 'baseline' }}>
+              <span className="bold mono" style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
                 {!connected
                   ? 'Reconnecting'
-                  : presence.online > 0
-                    ? `${presence.online} playing now`
-                    : 'Quiet right now'}
+                  : presence.inGame > 0
+                    ? `${presence.inGame} in a game`
+                    : presence.online > 0
+                      ? `${presence.online} online`
+                      : 'Quiet right now'}
               </span>
-              {connected && presence.online > 0 && (
-                <span className="faint thin mono" style={{ fontSize: 12 }}>
-                  {presence.inGame} in a game · {presence.rooms} rooms
+              {/* Only worth the space when it is a different number. The two
+                  counts are sampled separately on the server, so they can
+                  disagree for a tick, and a smaller "online" beside a larger
+                  "in a game" reads as a bug. */}
+              {connected && presence.inGame > 0 && presence.online > presence.inGame && (
+                <span className="faint thin mono" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  {presence.online} online
                 </span>
               )}
             </span>
@@ -504,10 +516,14 @@ function ModeGrid({
   blocked: boolean;
   onPick: (mode: GameMode, viaQuickplay: boolean) => void;
 }) {
+  // The meta line is the only thing that differs between one tile and the next,
+  // so the column has to be wide enough to show all of it. At 160px the longest
+  // of them lost its clock to the ellipsis, and four tiles left a fifth empty
+  // slot hanging off the end of the row.
   return (
     <div
       className="grid"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 'var(--s2)' }}
+      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(176px, 1fr))', gap: 'var(--s2)' }}
     >
       {modes.map((mode) => (
         <button

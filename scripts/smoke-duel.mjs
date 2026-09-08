@@ -92,14 +92,14 @@ async function main() {
   check('alice guess ranked', g1.ok && typeof g1.data?.rank === 'number', `rank=${g1.data?.rank} band=${g1.data?.band}`);
   check('alice guess not flagged as stolen', g1.ok && g1.data?.stolenFrom === null);
 
-  // Bob plays the same word -> must be tagged as already claimed by Alice.
+  // A duel closes claimed words: being second to one costs you the guess rather
+  // than quietly handing you your opponent's rank. Bob is told who took it and
+  // nothing else. (The marker-only behaviour, for rooms with the lock off, is
+  // covered in smoke-rules.)
   const g2 = await ask(bSock, 'game:guess', { word: 'sailor' });
-  check('bob got the same rank', g2.ok && g2.data?.rank === g1.data?.rank, `rank=${g2.data?.rank}`);
-  check(
-    'STEAL: bob sees "guessed by Alice"',
-    g2.data?.stolenFrom?.displayName === 'Alice',
-    JSON.stringify(g2.data?.stolenFrom),
-  );
+  check('a claimed word is closed in a duel', !g2.ok && g2.code === 'already-guessed', g2.error ?? 'accepted');
+  check('and the refusal names Alice', /Alice/.test(g2.error ?? ''), g2.error ?? '');
+  check('bob learns nothing about its rank', g2.data === undefined, JSON.stringify(g2.data));
 
   // Duplicate by the same player is rejected.
   const g3 = await ask(aSock, 'game:guess', { word: 'sailor' });

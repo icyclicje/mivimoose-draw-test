@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { BLOCKED_PATTERNS, BLOCKLIST, EXEMPT } from '../data/blocklist.js';
-import { COMMON_WORDS, FUNCTION_WORDS } from '../data/stopwords.js';
+import { COMMON_WORDS, FUNCTION_WORDS, THIN_WORDS } from '../data/stopwords.js';
 import { log } from '../log.js';
 
 /**
@@ -102,7 +102,12 @@ export function isBlocked(word: string): boolean {
  */
 export function isTooCommon(word: string, forGuess = false): boolean {
   const w = word.toLowerCase();
-  return FUNCTION_WORDS.has(w) || (!forGuess && COMMON_WORDS.has(w));
+  // Function words and thin qualifiers are refused even as guesses: they rank
+  // middling against every secret, so playing one costs a guess and tells you
+  // nothing. COMMON_WORDS are only barred as *answers* — "time" is a poor thing
+  // to hunt for but a perfectly reasonable probe.
+  if (FUNCTION_WORDS.has(w) || THIN_WORDS.has(w)) return true;
+  return !forGuess && COMMON_WORDS.has(w);
 }
 
 /** Fit to be an answer, a hint, or a word revealed on the board. */

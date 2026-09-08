@@ -35,14 +35,24 @@ function tap(): void {
   play('click');
 }
 
+/** "Ada Lovelace" → "Ada". Unchanged for a one-word name. */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 /**
- * Which round's countdown has already been announced, as `code:round`.
+ * Was this rejection somebody beating you to the word?
  *
- * Module level rather than a ref on purpose. App keeps this screen mounted
- * across countdown, playing and roundEnd, and StrictMode remounts it with fresh
- * refs in development — a ref would miss the first round or replay the cue.
+ * The store keeps a rejection as prose rather than as a GuessErrorCode, so the
+ * one rejection that is not a mistake has to be recognised from the text. The
+ * server writes `already-guessed` under lockClaimedWords as "<Name> guessed
+ * this word before you.", so a message that both names another player in the
+ * room and says they were first is that case, and earns the softer cue.
  */
-let cuedCountdown: string | null = null;
+function beatenToIt(message: string, rivals: string[]): boolean {
+  if (!/\bbefore you\b/i.test(message)) return false;
+  return rivals.some((name) => name.length > 0 && message.includes(name));
+}
 
 export function Game({ room }: { room: RoomState }) {
   const user = useStore((s) => s.user);
@@ -75,6 +85,23 @@ export function Game({ room }: { room: RoomState }) {
     const names = new Map(room.players.map((p) => [p.user.id, p.user.displayName]));
     return (id: string) => names.get(id) ?? 'Someone';
   }, [room.players]);
+
+  // Everyone else at the table, by name. Used to tell "somebody got there
+  // first" apart from an ordinary rejection.
+  const rivalNames = useMemo(
+    () => room.players.filter((p) => p.user.id !== user?.id).map((p) => p.user.displayName),
+    [room.players, user?.id],
+  );
+
+  /**
+   * How much of a roster pill survives as the table fills.
+   *
+   * The distance is the number people actually compare, so it is never the
+   * thing that gets cut — the name gives way instead. The strip scrolls, but a
+   * lobby you have to drag sideways through is worse than short names.
+   */
+  const rosterName: 'full' | 'first' | 'none' =
+    room.players.length <= 4 ? 'full' : room.players.length <= 7 ? 'first' : 'none';
 
   // Once you have found the word your round is over and the server starts
   // sending the other boards down. Watching is one player at a time rather than
@@ -118,17 +145,23 @@ export function Game({ room }: { room: RoomState }) {
     setWatching(null);
   }, [room.round]);
 
-  // One start cue per round. Room patches arrive several times a second and the
-  // screen mounts already in the countdown for round one, so the marker — not
-  // the phase transition — is what the sound hangs on.
+  /**
+   * One cue per phase transition.
+   *
+   * Room patches arrive several times a second, so the marker — not the render
+   * — is what the sound hangs on. A ref is enough because App deliberately does
+   * not key this screen on phase: it stays mounted across countdown, playing
+   * and roundEnd, and StrictMode re-runs the effect on the same instance.
+   */
+  const cuedPhase = useRef<string | null>(null);
   useEffect(() => {
-    if (room.phase !== 'countdown') return;
-    const key = `${room.code}:${room.round}`;
-    if (cuedCountdown === key) return;
-    cuedCountdown = key;
+    const key = `${room.code}:${room.round}:${room.phase}`;
+    if (cuedPhase.current === key) return;
+    cuedPhase.current = key;
     // Silent unless a gesture has already unlocked audio, which is what we want:
     // nothing on this screen should be the thing that starts making noise.
-    play('start');
+    if (room.phase === 'countdown') play('start');
+    else if (room.phase === 'roundEnd') play('roundEnd');
   }, [room.phase, room.code, room.round]);
 
   const canGuess =
@@ -155,7 +188,12 @@ export function Game({ room }: { room: RoomState }) {
         playRank(result.rank);
         setWord('');
       } else {
-        play('error');
+        // The rejection text only lands in the store once the ack resolves, so
+        // it is read back rather than taken from the render closure, which is
+        // still a submission behind. Losing a word to somebody is part of the
+        // game rather than a mistake, so it gets its own softer cue.
+        const message = useStore.getState().guessError ?? '';
+        play(beatenToIt(message, rivalNames) ? 'taken' : 'reject');
       }
     } finally {
       // In a finally block so a throw anywhere above cannot leave the input
@@ -187,6 +225,18 @@ export function Game({ room }: { room: RoomState }) {
       {/* ------------------------------------------------------- status */}
       <div className="statusbar">
         <span className="chip chip--brand">{modeLabel(room.mode)}</span>
+        {/* Somebody turned this on deliberately, and it is a fact about the
+            word you are hunting rather than lobby metadata — so it carries
+            weight and a colour instead of sitting with the faint text. */}
+        {room.secretLength !== null && (
+          <span
+            className="mono bold"
+            style={{ fontSize: 15, color: 'var(--accent)' }}
+            title="Letters in the answer"
+          >
+            {room.secretLength} {room.secretLength === 1 ? 'letter' : 'letters'}
+          </span>
+        )}
         {room.totalRounds > 1 && (
           <span className="mono" style={{ fontSize: 13 }}>
             Round {room.round}/{room.totalRounds}
@@ -241,15 +291,20 @@ export function Game({ room }: { room: RoomState }) {
                 room.activePlayerId === player.user.id && 'roster__item--active',
                 out && 'roster__item--out',
               )}
-              // The distance is repeated here because the pill clips it.
+              // Carries the whole name, which is what the pill drops first —
+              // on a busy strip the avatar plus this is how you identify a row.
               title={`${player.user.displayName} · ${formatAway(player.bestRank)} · ${player.score.toLocaleString()} pts · ${player.guessCount} guesses${
                 player.strikes > 0 ? ` · ${player.strikes} strikes` : ''
               }`}
             >
               <Avatar user={player.user} size={26} />
-              <span className="truncate" style={{ maxWidth: 92 }}>
-                {player.user.displayName}
-              </span>
+              {rosterName !== 'none' && (
+                <span className="truncate" style={{ maxWidth: rosterName === 'full' ? 92 : 62 }}>
+                  {rosterName === 'full'
+                    ? player.user.displayName
+                    : firstName(player.user.displayName)}
+                </span>
+              )}
               {/* Strikes only exist in sudden death, and there they are the
                   thing you watch — worth the extra glyphs on the pill. */}
               {player.strikes > 0 && (
@@ -258,13 +313,9 @@ export function Game({ room }: { room: RoomState }) {
                 </span>
               )}
               {/* "8,002 away" reads as a gap you are closing where a bare
-                  number reads as nothing. It is also long, so it clips at a
-                  fixed width instead of stretching the pill and pushing the
-                  players after it off the strip. */}
-              <span
-                className="roster__rank truncate"
-                style={{ color: heat, maxWidth: 78, flex: 'none' }}
-              >
+                  number reads as nothing — and half of it reads as neither, so
+                  it is never truncated. Room is made by shortening the name. */}
+              <span className="roster__rank" style={{ color: heat, flex: 'none' }}>
                 {formatAway(player.bestRank)}
               </span>
             </div>
@@ -272,176 +323,246 @@ export function Game({ room }: { room: RoomState }) {
         })}
       </div>
 
-      {/* The word box. Deliberately the loudest thing on the page. */}
-      <form onSubmit={submit} className="col" style={{ gap: 'var(--s2)' }}>
-        <div className="row">
-          <input
-            ref={inputRef}
-            className="input input--word grow"
-            placeholder={
-              isSpectator
-                ? 'you are spectating'
-                : me?.status === 'found'
-                  ? 'you found it — watch the others'
-                  : me?.status === 'eliminated'
-                    ? 'you are out this round'
-                    : !myTurn
-                      ? `${nameFor(room.activePlayerId ?? '')} is thinking…`
-                      : frozen
-                        ? 'frozen after that cold guess…'
-                        : 'type a word'
-            }
-            value={word}
-            // readOnly rather than disabled while a guess is in flight. The
-            // browser blurs a disabled input and never hands the focus back,
-            // which is what dropped the caret on every Enter.
-            disabled={!canGuess}
-            readOnly={submitting}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            maxLength={32}
-            onChange={(e) => {
-              setWord(e.target.value);
-              if (guessError) clearGuessError();
-            }}
-          />
-          <button
-            className="btn btn--primary"
-            // Height tracks .input--word so the pair reads as one control.
-            style={{ height: 52, minWidth: 88 }}
-            type="submit"
-            disabled={!canGuess || submitting || !word.trim()}
-          >
-            Guess
-          </button>
-        </div>
-
-        {/* minHeight holds the row open at button height so the board does not
-            jump every time a rejection appears or clears. */}
-        <div className="row row--wrap" style={{ minHeight: 30, fontSize: 13 }}>
-          {/* Live region: a rejected word has to reach a screen reader without
-              pulling focus out of the word box. */}
-          <span className="grow truncate" aria-live="polite">
-            {guessError ? (
-              <motion.span
-                // Keyed on the text so a second rejection nudges again rather
-                // than sitting there looking like the first one.
-                key={guessError}
-                initial={{ opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                style={{ display: 'inline-block', color: 'var(--pink)' }}
-              >
-                {guessError}
-              </motion.span>
-            ) : null}
-          </span>
-
-          {/* A guess can wait on a slow server for several seconds. Outside the
-              live region above, so it is visible without being read out on
-              every word. */}
-          {submitting && (
-            <span className="row faint" style={{ gap: 'var(--s2)', flex: 'none' }}>
-              <Spinner size={13} />
-              checking
-            </span>
-          )}
-
-          {/* The hint count rides on its own button rather than being repeated
-              in the status bar — it only means anything where you spend it. */}
-          {room.settings.hints > 0 && me && (
-            <button
-              type="button"
-              className="btn btn--sm"
-              disabled={!canGuess || me.hintsLeft <= 0 || hinting}
-              onClick={() => void askHint()}
-            >
-              {hinting ? <Spinner size={13} /> : <ModeIcon name="spark" size={13} />}
-              Hint ({me.hintsLeft})
-            </button>
-          )}
-          {/* Stays mounted and disables instead of unmounting: a freeze or
-              somebody else's turn would otherwise shuffle this row every few
-              seconds while you are typing next to it. */}
-          {me && me.status !== 'found' && me.status !== 'eliminated' && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={!canGuess}
-              onClick={() => {
-                tap();
-                giveUp();
-              }}
-            >
-              Give up
-            </button>
-          )}
-        </div>
-      </form>
-
-      {/* Server commentary — who just took the lead, who is closing in. It sits
-          on the path your eye already takes from the word box to the board. */}
-      <StatusOverlay />
-
-      {/* ------------------------------------------------------- board */}
+      {/* Word box, commentary and board are one block rather than three page
+          rows. StatusOverlay reserves its height so the list never jumps as
+          lines come and go, and at page spacing that reserved band reads as a
+          hole whenever nobody is doing anything — hence the tighter gaps. */}
       <div className="col" style={{ gap: 'var(--s2)', minWidth: 0 }}>
-        {/* Board switcher. It only appears once you are out of the hunt, which
-            is the only time the other boards are on the client at all. */}
-        {canWatch && others.length > 0 && (
-          <div className="row row--wrap" style={{ gap: 'var(--s1)' }}>
-            <button
-              type="button"
-              className={cx('chip', watching === null && 'chip--brand')}
-              onClick={() => {
-                tap();
-                setWatching(null);
+        {/* The word box. Deliberately the loudest thing on the page. */}
+        <form onSubmit={submit} className="col" style={{ gap: 'var(--s2)' }}>
+          <div className="row">
+            <input
+              ref={inputRef}
+              className="input input--word grow"
+              placeholder={
+                isSpectator
+                  ? 'you are spectating'
+                  : me?.status === 'found'
+                    ? 'you found it — watch the others'
+                    : me?.status === 'eliminated'
+                      ? 'you are out this round'
+                      : !myTurn
+                        ? `${nameFor(room.activePlayerId ?? '')} is thinking…`
+                        : frozen
+                          ? 'frozen after that cold guess…'
+                          : 'type a word'
+              }
+              value={word}
+              // readOnly rather than disabled while a guess is in flight. The
+              // browser blurs a disabled input and never hands the focus back,
+              // which is what dropped the caret on every Enter.
+              disabled={!canGuess}
+              readOnly={submitting}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={32}
+              onChange={(e) => {
+                setWord(e.target.value);
+                if (guessError) clearGuessError();
               }}
+            />
+            <button
+              className="btn btn--primary"
+              // Height tracks .input--word so the pair reads as one control.
+              style={{ height: 52, minWidth: 88 }}
+              type="submit"
+              disabled={!canGuess || submitting || !word.trim()}
             >
-              your board
+              Guess
             </button>
-            {others.map((player) => (
+          </div>
+
+          {/* minHeight holds the row open at button height so the board does not
+              jump every time a rejection appears or clears. */}
+          <div className="row row--wrap" style={{ minHeight: 30, fontSize: 13 }}>
+            {/* Live region: a rejected word has to reach a screen reader without
+                pulling focus out of the word box. */}
+            <span className="grow truncate" aria-live="polite">
+              {guessError ? (
+                <motion.span
+                  // Keyed on the text so a second rejection nudges again rather
+                  // than sitting there looking like the first one.
+                  key={guessError}
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  style={{ display: 'inline-block', color: 'var(--pink)' }}
+                >
+                  {guessError}
+                </motion.span>
+              ) : latestGuess?.normalizedFrom ? (
+                // The list keeps one form of a word and ranks that one, so a
+                // plural or a British spelling still scores. Naming the word
+                // that was actually used is how people learn the list is
+                // forgiving — it is information, not a correction, so it shares
+                // the rejection's slot but not its colour, and it fades in
+                // rather than nudging the way an error does.
+                <motion.span
+                  key={latestGuess.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="dim"
+                  style={{ display: 'inline-block' }}
+                >
+                  {latestGuess.normalizedFrom} matched as{' '}
+                  <span className="bold">{latestGuess.word}</span>
+                </motion.span>
+              ) : null}
+            </span>
+
+            {/* A guess can wait on a slow server for several seconds. Outside the
+                live region above, so it is visible without being read out on
+                every word. */}
+            {submitting && (
+              <span className="row faint" style={{ gap: 'var(--s2)', flex: 'none' }}>
+                <Spinner size={13} />
+                checking
+              </span>
+            )}
+
+            {/* The hint count rides on its own button rather than being repeated
+                in the status bar — it only means anything where you spend it. */}
+            {room.settings.hints > 0 && me && (
               <button
-                key={player.user.id}
                 type="button"
-                className={cx('chip', watching === player.user.id && 'chip--brand')}
+                className="btn btn--sm"
+                disabled={!canGuess || me.hintsLeft <= 0 || hinting}
+                onClick={() => void askHint()}
+              >
+                {hinting ? <Spinner size={13} /> : <ModeIcon name="spark" size={13} />}
+                Hint ({me.hintsLeft})
+              </button>
+            )}
+            {/* Stays mounted and disables instead of unmounting: a freeze or
+                somebody else's turn would otherwise shuffle this row every few
+                seconds while you are typing next to it. */}
+            {me && me.status !== 'found' && me.status !== 'eliminated' && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                disabled={!canGuess}
                 onClick={() => {
                   tap();
-                  setWatching(player.user.id);
+                  giveUp();
                 }}
-                title={`Watch ${player.user.displayName}`}
               >
-                {player.user.displayName}
-                {player.bestRank !== null && (
-                  <span className="mono faint" style={{ marginLeft: 6 }}>
-                    {formatRank(player.bestRank)}
-                  </span>
-                )}
+                Give up
               </button>
-            ))}
+            )}
           </div>
-        )}
+        </form>
 
-        <div className="row row--between faint" style={{ fontSize: 12 }}>
-          <span>{watched ? `watching ${watched.user.displayName}` : 'your board'}</span>
-          <span className="mono">
-            {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
-          </span>
+        {/* Server commentary — who just took the lead, who is closing in. It
+            sits on the path your eye already takes from the word box to the
+            board. */}
+        <StatusOverlay />
+
+        {/* ------------------------------------------------------- board */}
+        <div className="col" style={{ gap: 'var(--s2)', minWidth: 0 }}>
+          {/* Board switcher. It only appears once you are out of the hunt, which
+              is the only time the other boards are on the client at all. It
+              scrolls sideways like the roster: wrapped to a second row, the
+              tabs push the list they belong to off a short screen. */}
+          {canWatch && others.length > 0 && (
+            <div className="row" style={{ gap: 'var(--s1)', overflowX: 'auto', paddingBottom: 2 }}>
+              <button
+                type="button"
+                className={cx('chip', watching === null && 'chip--brand')}
+                style={{ flex: 'none' }}
+                onClick={() => {
+                  tap();
+                  setWatching(null);
+                }}
+              >
+                your board
+              </button>
+              {others.map((player) => (
+                <button
+                  key={player.user.id}
+                  type="button"
+                  className={cx('chip', watching === player.user.id && 'chip--brand')}
+                  style={{ flex: 'none' }}
+                  onClick={() => {
+                    tap();
+                    setWatching(player.user.id);
+                  }}
+                  title={`Watch ${player.user.displayName}`}
+                >
+                  {/* A face is quicker to find in a row of tabs than a name you
+                      have to read, which is the whole job of this strip. */}
+                  <Avatar user={player.user} size={16} />
+                  {player.user.displayName}
+                  {player.bestRank !== null && (
+                    <span className="mono faint" style={{ marginLeft: 6 }}>
+                      {formatRank(player.bestRank)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Whose list this is. A highlighted tab above a column of words is
+              easy to read straight past, and then somebody else's guesses look
+              like your own — so the owner is named here, with the two numbers
+              that say how their round is going. minHeight keeps the line the
+              same height on both boards so switching does not shift the list. */}
+          <div className="row" style={{ gap: 'var(--s2)', minWidth: 0, minHeight: 26 }}>
+            {watched ? (
+              <>
+                <span className="eyebrow" style={{ flex: 'none' }}>
+                  watching
+                </span>
+                <Avatar user={watched.user} size={24} />
+                <span className="bold truncate">{watched.user.displayName}</span>
+                <span className="grow" />
+                <span className="mono faint" style={{ fontSize: 12, flex: 'none' }}>
+                  {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
+                </span>
+                <span
+                  className="mono bold"
+                  style={{
+                    fontSize: 13,
+                    flex: 'none',
+                    // Same banding as the bars and the roster, so a rank reads
+                    // the same colour wherever it appears.
+                    color:
+                      watched.bestRank !== null
+                        ? bandColor(bandForRank(watched.bestRank))
+                        : 'var(--text-faint)',
+                  }}
+                >
+                  {formatAway(watched.bestRank)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="faint" style={{ fontSize: 12 }}>
+                  your board
+                </span>
+                <span className="grow" />
+                <span className="mono faint" style={{ fontSize: 12, flex: 'none' }}>
+                  {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'}
+                </span>
+              </>
+            )}
+          </div>
+          <GuessList
+            guesses={guesses}
+            // The pulse and the last-submitted row belong to your own board; on
+            // somebody else's they would flash their guess as though it were yours.
+            latestId={watched ? null : latestGuessId}
+            latestGuess={watched ? null : latestGuess}
+            pulse={watched ? 0 : guessSeq}
+            emptyHint={
+              watched
+                ? `${watched.user.displayName} has not guessed yet`
+                : isSpectator
+                  ? 'watching along — the board fills as they guess'
+                  : 'start broad. music, ocean, money. then follow the heat.'
+            }
+          />
         </div>
-        <GuessList
-          guesses={guesses}
-          // The pulse and the last-submitted row belong to your own board; on
-          // somebody else's they would flash their guess as though it were yours.
-          latestId={watched ? null : latestGuessId}
-          latestGuess={watched ? null : latestGuess}
-          pulse={watched ? 0 : guessSeq}
-          emptyHint={
-            watched
-              ? `${watched.user.displayName} has not guessed yet`
-              : isSpectator
-                ? 'watching along — the board fills as they guess'
-                : 'start broad. music, ocean, money. then follow the heat.'
-          }
-        />
       </div>
 
       {/* ------------------------------------------------------- drawer

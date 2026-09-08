@@ -71,5 +71,50 @@ export const COMMON_WORDS = new Set([
   'use', 'uses', 'work', 'works', 'help', 'want', 'wanted', 'mean', 'means', 'meant',
 ]);
 
+/**
+ * Words that sit too near everything to be a useful guess.
+ *
+ * These are not rare or rude, they are *thin*: generic qualifiers and degree
+ * words that co-occur with half the language, so they rank middling against
+ * almost any secret and teach you nothing. Playing "important" tells you
+ * nothing about the answer, but it does burn a guess and clutter the board.
+ *
+ * The line is deliberately drawn at contentless words only. Concrete
+ * descriptors — "red", "cold", "heavy", "sharp", "loud" — are real signal about
+ * a real property and stay guessable; blocking those would gut the game.
+ */
+export const THIN_WORDS = new Set([
+  // Degree and hedging
+  'very', 'really', 'quite', 'rather', 'fairly', 'somewhat', 'slightly', 'extremely',
+  'entirely', 'completely', 'totally', 'absolutely', 'utterly', 'highly', 'greatly',
+  'almost', 'nearly', 'hardly', 'barely', 'scarcely', 'merely', 'simply', 'just',
+
+  // Frequency and time-shape
+  'always', 'never', 'often', 'sometimes', 'usually', 'normally', 'typically',
+  'generally', 'occasionally', 'rarely', 'seldom', 'frequently', 'constantly',
+  'already', 'still', 'yet', 'soon', 'later', 'earlier', 'recently', 'currently',
+
+  // Contentless qualifiers
+  'important', 'possible', 'impossible', 'available', 'actual', 'basic', 'simple',
+  'complex', 'special', 'specific', 'similar', 'different', 'various', 'several',
+  'usual', 'unusual', 'normal', 'typical', 'major', 'minor', 'primary', 'secondary',
+  'additional', 'further', 'extra', 'overall', 'total', 'entire', 'whole', 'partial',
+  'relevant', 'appropriate', 'suitable', 'proper', 'correct', 'incorrect', 'wrong',
+  'significant', 'considerable', 'substantial', 'reasonable', 'obvious', 'clear',
+  'difficult', 'easy', 'hard', 'possible', 'likely', 'unlikely', 'probable',
+
+  // Scale words with no referent of their own
+  'many', 'much', 'more', 'most', 'less', 'least', 'few', 'fewer', 'enough', 'plenty',
+  'big', 'small', 'large', 'little', 'huge', 'tiny', 'high', 'low', 'long', 'short',
+
+  // Discourse glue
+  'however', 'although', 'though', 'therefore', 'thus', 'hence', 'instead',
+  'moreover', 'furthermore', 'nevertheless', 'nonetheless', 'meanwhile', 'otherwise',
+  'perhaps', 'maybe', 'probably', 'possibly', 'certainly', 'definitely', 'apparently',
+  'basically', 'actually', 'essentially', 'literally', 'obviously', 'clearly',
+  'anything', 'something', 'nothing', 'everything', 'anyone', 'everyone', 'nobody',
+  'anywhere', 'somewhere', 'nowhere', 'everywhere', 'anyway', 'somehow',
+]);
+
 /** Everything the answer pool refuses. */
-export const STOPWORDS = new Set([...FUNCTION_WORDS, ...COMMON_WORDS]);
+export const STOPWORDS = new Set([...FUNCTION_WORDS, ...COMMON_WORDS, ...THIN_WORDS]);

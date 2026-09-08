@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildDailyShare,
   dailyTierBreakdown,
@@ -7,9 +7,11 @@ import {
 } from '@mivimoose/shared';
 import { GuessList } from '../components/game';
 import { Logo } from '../components/Logo';
+import { ModeIcon } from '../components/ModeIcon';
 import { Avatar, EmptyState, Section, Spinner } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { cx, ordinal } from '../lib/format';
+import { play } from '../lib/sound';
 import { useStore } from '../lib/store';
 
 /** "1 guess", not "1 guesses" — every player hits n=1 on their first go. */
@@ -21,6 +23,12 @@ function guessLabel(n: number): string {
    so today's standings are never allowed to push it off screen. */
 const STANDINGS_MAX = 224;
 
+/* Six rows of the board, then it scrolls too. Both lists on this page are
+   open-ended, so if neither is capped a long session pushes the standings off
+   the bottom and the page grows instead of the list. Six is the useful window:
+   the list is sorted by rank, so the rows on show are the closest guesses. */
+const BOARD_MAX = 228;
+
 /**
  * The daily challenge is the closest thing here to Contexto proper: one word,
  * one column, one list. So it is laid out that way — a narrow page, the word
@@ -28,6 +36,9 @@ const STANDINGS_MAX = 224;
  */
 export function Daily() {
   const toast = useStore((s) => s.toast);
+  const connected = useStore((s) => s.connected);
+  // Co-op itself works for guests; only naming someone in an invite does not.
+  const isGuest = useStore((s) => s.user?.isGuest ?? false);
   const [state, setState] = useState<DailyChallengeState | null>(null);
   const [board, setBoard] = useState<LeaderboardRow[]>([]);
   const [word, setWord] = useState('');
@@ -39,6 +50,16 @@ export function Daily() {
   const [manualCopy, setManualCopy] = useState(false);
   // Bumped by Try again; the only thing the load effect depends on.
   const [attempt, setAttempt] = useState(0);
+  // Opening a room is a round trip; without this a second click opens a second room.
+  const [opening, setOpening] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+
+  // The pinned copy of your last guess is the first thing in the board's
+  // scroller, so a board left scrolled down would answer "how did that do?"
+  // off screen. Snap back on every new row.
+  useEffect(() => {
+    if (latestId && boardRef.current) boardRef.current.scrollTop = 0;
+  }, [latestId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +133,23 @@ export function Daily() {
     }
   }
 
+  /**
+   * The store owns the socket call and switches to the play tab itself, so
+   * this only has to own the button's disabled state. It is read through
+   * getState rather than subscribed to: the action never changes, and
+   * subscribing would re-render the board for nothing.
+   */
+  async function openCoop() {
+    play('click');
+    setOpening(true);
+    try {
+      // null means the server refused — the store has already said so.
+      await useStore.getState().startDailyCoop();
+    } finally {
+      setOpening(false);
+    }
+  }
+
   if (!state) {
     return (
       <div className="page page--narrow" style={{ alignItems: 'center' }}>
@@ -181,9 +219,40 @@ export function Daily() {
         </p>
       </header>
 
-      {state.solved ? (
-        shareBar
-      ) : (
+      {/* Co-op belongs under the header, not beside the board: it is another way
+          into today's word rather than an action on the guesses you already have. */}
+      <div className="col" style={{ gap: 'var(--s1)' }}>
+        <div className="row row--wrap" style={{ gap: 'var(--s3)' }}>
+          <button
+            type="button"
+            // Matched to the Share button beside it, which grows once you
+            // solve: two buttons of different heights in one row read as a
+            // mistake.
+            className={cx('btn', !state.solved && 'btn--sm')}
+            disabled={opening || !connected}
+            onClick={() => void openCoop()}
+          >
+            {/* Swapped, not added, so the label does not shift sideways the
+                moment the request starts. */}
+            {opening ? <Spinner size={13} /> : <ModeIcon name="users" size={13} />}
+            Play with friends
+          </button>
+          {/* Solved: the guess box is gone, so share moves up beside co-op
+              instead of holding a row of its own. */}
+          {state.solved && shareBar && <div className="grow">{shareBar}</div>}
+        </div>
+        {/* One paragraph, not three lines: both notes are footnotes to the same
+            sentence, and a page this tall cannot spare a row for each. The
+            offline note is here rather than in a title attribute because a
+            disabled button swallows hover on most browsers. */}
+        <p className="faint thin" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45 }}>
+          Everyone works the same word together on one shared board.
+          {isGuest && ' Inviting people by name needs a Discord sign-in.'}
+          {!connected && ' Waiting for the connection before a room can open.'}
+        </p>
+      </div>
+
+      {!state.solved && (
         <form onSubmit={submit} className="col" style={{ gap: 'var(--s2)' }}>
           <div className="row">
             <input
@@ -224,11 +293,13 @@ export function Daily() {
             onFocus={(e) => e.currentTarget.select()}
           />
         )}
-        <GuessList
-          guesses={state.guesses}
-          latestId={latestId}
-          emptyHint="no guesses yet — start with something broad."
-        />
+        <div ref={boardRef} style={{ maxHeight: BOARD_MAX, overflowY: 'auto' }}>
+          <GuessList
+            guesses={state.guesses}
+            latestId={latestId}
+            emptyHint="no guesses yet — start with something broad."
+          />
+        </div>
       </Section>
 
       <Section title="Today's fastest" action={<span className="faint thin">fewest guesses</span>}>
@@ -257,7 +328,9 @@ export function Daily() {
                   background: row.isMe ? 'var(--surface-3)' : 'var(--surface-2)',
                 }}
               >
-                <span className="mono dim" style={{ width: 18, fontSize: 13, flex: 'none' }}>
+                {/* minWidth, not width: past rank 99 a fixed box spills the
+                    number under the avatar. */}
+                <span className="mono dim" style={{ minWidth: 18, fontSize: 13, flex: 'none' }}>
                   {row.rank}
                 </span>
                 <Avatar user={row.user} size={22} />

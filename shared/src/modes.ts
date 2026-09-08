@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   visibility: 'best',
   endOnFirstFind: false,
   showStolenWords: true,
+  lockClaimedWords: false,
+  showWordLength: false,
   ranked: false,
   allowSpectators: true,
   private: false,
@@ -46,12 +48,13 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
       visibility: 'best',
       // A race is over when someone wins it.
       endOnFirstFind: true,
+      lockClaimedWords: true,
     },
   },
   duel: {
     id: 'duel',
     name: 'Duel',
-    tagline: 'Head to head, rated, best of three',
+    tagline: 'Head to head, rated, one word, three minutes',
     description:
       'One on one, and the boards stay private. A word your opponent has already burned is simply closed to you — you learn that it is taken and nothing else. Moves your Elo.',
     minPlayers: 2,
@@ -60,12 +63,15 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     accent: '#ff6b6b',
     locked: ['maxPlayers'],
     defaults: {
-      rounds: 3,
-      roundSeconds: 150,
+      // One word, three minutes. A duel is a single decisive race, not a
+      // best-of that outlasts the tension.
+      rounds: 1,
+      roundSeconds: 180,
       maxPlayers: 2,
       ranked: true,
       visibility: 'full',
       endOnFirstFind: true,
+      lockClaimedWords: true,
     },
   },
   blitz: {

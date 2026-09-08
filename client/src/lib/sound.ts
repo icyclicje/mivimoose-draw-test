@@ -31,7 +31,13 @@ export type Sfx =
   | 'tick'
   | 'win'
   | 'lose'
-  | 'invite';
+  | 'invite'
+  | 'taken'
+  | 'streak'
+  | 'lead'
+  | 'reject'
+  | 'roundEnd'
+  | 'eliminate';
 
 interface SoundPrefs {
   music: boolean;
@@ -200,6 +206,36 @@ const SFX: Record<Sfx, () => void> = {
     tone({ freq: 784, dur: 0.1, type: 'triangle', gain: 0.13 });
     tone({ freq: 1047, dur: 0.14, type: 'triangle', gain: 0.11, delay: 0.09 });
   },
+  // Somebody beat you to a word. A closed door, not a failure: a short
+  // descending knock rather than the harsher error buzz.
+  taken: () => {
+    tone({ freq: 392, dur: 0.08, type: 'triangle', gain: 0.12 });
+    tone({ freq: 294, dur: 0.12, type: 'triangle', gain: 0.1, delay: 0.07 });
+  },
+  // A run of green. Rising, and it keeps rising — the point is momentum.
+  streak: () => {
+    [659, 784, 988].forEach((f, i) =>
+      tone({ freq: f, dur: 0.16, type: 'triangle', gain: 0.13, delay: i * 0.07 }),
+    );
+  },
+  // Somebody has pulled well ahead. Deliberately a touch ominous.
+  lead: () => {
+    tone({ freq: 330, dur: 0.24, type: 'sine', gain: 0.11 });
+    tone({ freq: 247, dur: 0.3, type: 'sine', gain: 0.1, delay: 0.12 });
+  },
+  // A word the list does not have. Softer than 'error', which is for real
+  // mistakes — an unknown word is an ordinary part of playing.
+  reject: () => tone({ freq: [280, 220], dur: 0.11, type: 'triangle', gain: 0.075 }),
+  roundEnd: () => {
+    [523, 415].forEach((f, i) =>
+      tone({ freq: f, dur: 0.26, type: 'sine', gain: 0.12, delay: i * 0.13 }),
+    );
+  },
+  eliminate: () => {
+    [392, 311, 233].forEach((f, i) =>
+      tone({ freq: f, dur: 0.26, type: 'sawtooth', gain: 0.075, delay: i * 0.1 }),
+    );
+  },
 };
 
 export function play(name: Sfx): void {
@@ -227,40 +263,96 @@ export function playRank(rank: number): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Menu music
+ * Music
  * ------------------------------------------------------------------ */
 
 /**
- * A slow generative loop rather than a track: a pentatonic bass pulse with an
- * occasional bell on top. It is meant to sit under menus without ever becoming
- * the thing you notice, and it costs nothing to ship.
+ * Two beds, generated rather than streamed.
+ *
+ * `menu` is slow and open — a wandering pentatonic with long gaps, meant to sit
+ * under browsing without asking for attention.
+ *
+ * `game` is the competitive-chill one: same restraint, but with a steady pulse
+ * under it and a tighter, more purposeful figure on top. It should feel like a
+ * clock is running without ever becoming tense enough to distract from reading
+ * words.
+ *
+ * Both stay in A minor pentatonic so switching between them mid-session never
+ * clashes.
  */
-const BASS = [131, 147, 165, 196, 220];
-const BELL = [523, 587, 659, 784, 880];
+export type MusicMood = 'menu' | 'game';
 
-export function startMusic(): void {
+interface Bed {
+  /** ms between steps. */
+  tempo: number;
+  bass: number[];
+  lead: number[];
+  /** Play the lead every N steps. */
+  leadEvery: number;
+  bassGain: number;
+  leadGain: number;
+  /** A quiet off-beat pulse. Only the game bed uses one. */
+  pulse: boolean;
+}
+
+const BEDS: Record<MusicMood, Bed> = {
+  menu: {
+    tempo: 1800,
+    bass: [110, 131, 147, 98],
+    lead: [523, 587, 659, 784, 880],
+    leadEvery: 3,
+    bassGain: 0.05,
+    leadGain: 0.03,
+    pulse: false,
+  },
+  game: {
+    // Faster and evenly divided, so the pulse reads as a heartbeat rather than
+    // a melody you start following instead of playing.
+    tempo: 1100,
+    bass: [110, 110, 147, 131],
+    lead: [659, 784, 880, 784, 659, 587],
+    leadEvery: 2,
+    bassGain: 0.055,
+    leadGain: 0.028,
+    pulse: true,
+  },
+};
+
+let musicMood: MusicMood = 'menu';
+
+export function startMusic(mood: MusicMood = musicMood): void {
+  musicMood = mood;
   if (musicTimer !== null || !prefs.music) return;
   const c = audio();
   if (!c || !master) return;
 
-  musicGain = c.createGain();
-  musicGain.gain.value = 0.25;
-  musicGain.connect(master);
-
   const step = () => {
-    if (!ctx || !musicGain) return;
-    const i = musicStep % BASS.length;
-    // Bass on every beat.
-    tone({ freq: BASS[i], dur: 1.6, type: 'sine', gain: 0.05 });
-    // A bell every third beat, wandering through the scale.
-    if (musicStep % 3 === 0) {
-      tone({ freq: BELL[(musicStep * 2) % BELL.length], dur: 1.1, type: 'triangle', gain: 0.03 });
+    const bed = BEDS[musicMood];
+    const i = musicStep % bed.bass.length;
+    tone({ freq: bed.bass[i], dur: bed.tempo / 1000 - 0.15, type: 'sine', gain: bed.bassGain });
+
+    if (musicStep % bed.leadEvery === 0) {
+      const note = bed.lead[(musicStep * 2) % bed.lead.length];
+      tone({ freq: note, dur: 1.1, type: 'triangle', gain: bed.leadGain });
     }
+
+    if (bed.pulse) {
+      // Off-beat, an octave up, barely there. This is what makes the game bed
+      // feel like it is moving without adding anything to listen to.
+      tone({
+        freq: bed.bass[i] * 2,
+        dur: 0.09,
+        type: 'triangle',
+        gain: 0.018,
+        delay: bed.tempo / 2000,
+      });
+    }
+
     musicStep += 1;
   };
 
   step();
-  musicTimer = window.setInterval(step, 1800);
+  musicTimer = window.setInterval(step, BEDS[mood].tempo);
 }
 
 export function stopMusic(): void {
@@ -270,6 +362,28 @@ export function stopMusic(): void {
   }
   musicGain?.disconnect();
   musicGain = null;
+}
+
+/**
+ * Switch bed without a gap.
+ *
+ * Called on every room-phase change, so it has to be cheap and idempotent —
+ * restarting the loop only when the mood actually differs, otherwise the music
+ * would stutter every time the room state was pushed.
+ */
+export function setMusicMood(mood: MusicMood): void {
+  if (mood === musicMood) return;
+  musicMood = mood;
+  musicStep = 0;
+  if (musicTimer !== null) {
+    window.clearInterval(musicTimer);
+    musicTimer = null;
+    startMusic(mood);
+  }
+}
+
+export function getMusicMood(): MusicMood {
+  return musicMood;
 }
 
 /** True once a gesture has let audio start; the UI uses it to explain silence. */

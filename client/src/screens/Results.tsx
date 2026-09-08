@@ -4,6 +4,7 @@ import {
   bandForRank,
   type GuessPath,
   type MatchReplay,
+  type MatchResult,
   type MatchResultEntry,
   type RoomState,
   type RoundSummary,
@@ -40,6 +41,270 @@ function deltaColor(n: number): string {
 }
 
 /* ------------------------------------------------------------------ *
+ * Reading a round
+ * ------------------------------------------------------------------ */
+
+/**
+ * The server stamps foundAt and drops bestRank to 1 in the same step, so either
+ * one on its own is enough to call it found. Reading both keeps the check right
+ * for a summary row that arrives carrying the rank but not the clock.
+ */
+function foundTheWord(entry: RoundSummaryEntry): boolean {
+  return entry.foundAt !== null || entry.bestRank === 1;
+}
+
+/** Whoever got there first by the clock; a find with no clock sorts last. */
+function finderOf(round: RoundSummary): RoundSummaryEntry | null {
+  let first: RoundSummaryEntry | null = null;
+  for (const entry of round.entries) {
+    if (!foundTheWord(entry)) continue;
+    if (first === null) {
+      first = entry;
+      continue;
+    }
+    if ((entry.foundAt ?? Infinity) < (first.foundAt ?? Infinity)) first = entry;
+  }
+  return first;
+}
+
+/** The nearest miss, which is the only story a round nobody solved has. */
+function closestOf(round: RoundSummary): RoundSummaryEntry | null {
+  let best: RoundSummaryEntry | null = null;
+  for (const entry of round.entries) {
+    if (entry.bestRank === null) continue;
+    if (best === null || entry.bestRank < (best.bestRank ?? Infinity)) best = entry;
+  }
+  return best;
+}
+
+function guessCount(n: number): string {
+  return n === 1 ? '1 guess' : `${n} guesses`;
+}
+
+/** How somebody landed the word, as one clause: "found it in 2 guesses, 2.9s in". */
+function foundClause(entry: RoundSummaryEntry): string {
+  const how = entry.guessCount > 0 ? ` in ${guessCount(entry.guessCount)}` : '';
+  const when = entry.foundAt !== null ? `, ${formatDuration(entry.foundAt)} in` : '';
+  return `found it${how}${when}`;
+}
+
+/** The same two facts as a compact column: "2 guesses · 2.9s". */
+function foundDetail(entry: RoundSummaryEntry): string {
+  const parts: string[] = [];
+  if (entry.guessCount > 0) parts.push(guessCount(entry.guessCount));
+  if (entry.foundAt !== null) parts.push(formatDuration(entry.foundAt));
+  return parts.join(' · ');
+}
+
+/**
+ * One round in the recap, split in two.
+ *
+ * The name goes in a column that may truncate; the count or the distance goes
+ * in one that may not. Kept as a single sentence it was the number that got
+ * cut off, which is the only part of the row worth reading.
+ */
+interface RoundRecap {
+  who: string;
+  detail: string;
+  found: boolean;
+}
+
+function roundRecap(round: RoundSummary): RoundRecap {
+  const finder = finderOf(round);
+  if (finder) {
+    const others = round.entries.filter(foundTheWord).length - 1;
+    return {
+      who: `${finder.displayName} found it${others > 0 ? ` · ${others} more did too` : ''}`,
+      detail: foundDetail(finder),
+      found: true,
+    };
+  }
+  const closest = closestOf(round);
+  return closest
+    ? { who: `${closest.displayName} was closest`, detail: formatAway(closest.bestRank), found: false }
+    : { who: 'nobody guessed', detail: '', found: false };
+}
+
+/* ------------------------------------------------------------------ *
+ * Verdict — why this result happened
+ * ------------------------------------------------------------------ */
+
+interface Verdict {
+  icon: string;
+  color: string;
+  /** The result in one sentence, drawn from the rounds rather than the score. */
+  line: string;
+  /** The second sentence: the margin, or what settled a level score. */
+  note: string | null;
+}
+
+/** The round a player was knocked out in, or null if they lasted the match. */
+function eliminatedIn(rounds: RoundSummary[], playerId: string): number | null {
+  return rounds.find((r) => r.eliminated.includes(playerId))?.round ?? null;
+}
+
+/**
+ * What actually put the leader above second place, when it was not points.
+ *
+ * The server sorts elimination by survival first, then everything by score and
+ * then by words found. A level score with no explanation is the one result that
+ * reads as a bug, so name the rule that broke it.
+ */
+function settlementNote(
+  result: MatchResult,
+  leader: MatchResultEntry,
+  runnerUp: MatchResultEntry | null,
+): string | null {
+  // A co-op team shares one score, so a level score there is the design, not a tie.
+  if (!runnerUp || result.mode === 'coop') return null;
+
+  if (result.mode === 'elimination') {
+    const out = eliminatedIn(result.rounds, runnerUp.playerId);
+    if (out !== null && eliminatedIn(result.rounds, leader.playerId) === null) {
+      return `${leader.displayName} was still in at the end; ${runnerUp.displayName} went out in round ${out}.`;
+    }
+  }
+
+  if (leader.score !== runnerUp.score) return null;
+  if (leader.wordsFound !== runnerUp.wordsFound) {
+    return `Level on ${leader.score.toLocaleString()} points, so words found settled it: ${leader.wordsFound} to ${runnerUp.wordsFound}.`;
+  }
+  return `Level on ${leader.score.toLocaleString()} points and ${leader.wordsFound} words found — as close to a draw as the scoring gets.`;
+}
+
+/** How close the runner-up got, for the one-word modes where that is the whole match. */
+function chaseNote(round: RoundSummary, runnerUp: MatchResultEntry | null): string | null {
+  if (!runnerUp) return null;
+  const entry = round.entries.find((e) => e.playerId === runnerUp.playerId);
+  if (!entry) return null;
+  if (foundTheWord(entry)) {
+    return entry.foundAt !== null
+      ? `${runnerUp.displayName} found it too, ${formatDuration(entry.foundAt)} in.`
+      : `${runnerUp.displayName} found it too.`;
+  }
+  if (entry.bestRank === null) return `${runnerUp.displayName} never got a guess in.`;
+  const after = entry.guessCount > 0 ? ` after ${guessCount(entry.guessCount)}` : '';
+  return `${runnerUp.displayName} stopped ${formatAway(entry.bestRank)}${after}.`;
+}
+
+/** The points gap, so a win reads as comfortable or narrow rather than just first. */
+function marginNote(
+  result: MatchResult,
+  leader: MatchResultEntry,
+  runnerUp: MatchResultEntry | null,
+): string | null {
+  if (!runnerUp) return null;
+  const gap = leader.score - runnerUp.score;
+  if (gap <= 0) return null;
+  // Naming the runner-up's haul as well is what stops "took 2 of 3" reading as
+  // a contradiction when they actually found more words and still lost.
+  const took =
+    result.rounds.length > 1
+      ? `, who took ${runnerUp.wordsFound} of ${result.rounds.length}`
+      : '';
+  return `${gap.toLocaleString()} points clear of ${runnerUp.displayName}${took}.`;
+}
+
+/**
+ * Two short sentences at most.
+ *
+ * A third is another wrapped line on a screen that has to hold the standings
+ * and the round list inside 680px, and the first two are always the ones that
+ * explain the result rather than decorate it.
+ */
+function joinNotes(...parts: (string | null)[]): string | null {
+  const kept = parts.filter((part): part is string => part !== null).slice(0, 2);
+  return kept.length > 0 ? kept.join(' ') : null;
+}
+
+/**
+ * One sentence saying why the standings look the way they do.
+ *
+ * Assembled from result.rounds and result.entries: the payload carries no
+ * post-match narrative, and a placement on its own explains nothing.
+ */
+function buildVerdict(result: MatchResult): Verdict {
+  const rounds = result.rounds;
+  const leader = result.entries.find((e) => e.placement === 1) ?? result.entries[0] ?? null;
+
+  if (rounds.length === 0 || !leader) {
+    return {
+      icon: 'info',
+      color: 'var(--text-faint)',
+      line: 'The match ended before a round finished',
+      note: null,
+    };
+  }
+
+  const runnerUp = result.entries.find((e) => e.placement === 2) ?? null;
+  const settled = settlementNote(result, leader, runnerUp);
+
+  // One word: the match is that round, so the verdict is that round's story.
+  if (rounds.length === 1) {
+    const round = rounds[0];
+    const finder = finderOf(round);
+    const closest = finder ? null : closestOf(round);
+    // Hints and guess count are priced in, so the fastest find does not always
+    // top the table. Left unsaid, that reads as the screen contradicting itself.
+    const upset =
+      finder && finder.playerId !== leader.playerId
+        ? `${leader.displayName} still finished first on points.`
+        : null;
+    // The chase line would repeat the headline word for word when the runner-up
+    // is the player the headline already names.
+    const named = finder ?? closest;
+    const chase =
+      runnerUp !== null && named !== null && named.playerId === runnerUp.playerId
+        ? null
+        : chaseNote(round, runnerUp);
+    // A level score comes first: it is the one thing on this screen a player can
+    // see for themselves and misread as a bug.
+    const note = joinNotes(settled, upset, chase ?? marginNote(result, leader, runnerUp));
+    if (finder) {
+      return {
+        icon: 'target',
+        color: 'var(--green)',
+        line: `${finder.displayName} ${foundClause(finder)}`,
+        note,
+      };
+    }
+    return {
+      icon: 'snowflake',
+      color: 'var(--orange)',
+      line: closest
+        ? `Nobody found it — ${closest.displayName} was closest at ${formatAway(closest.bestRank)}`
+        : 'Nobody found it, and nobody got a guess in',
+      note,
+    };
+  }
+
+  // Several words: the decider is how many of them the leader actually took.
+  const note = joinNotes(settled, marginNote(result, leader, runnerUp));
+  if (leader.wordsFound > 0) {
+    return {
+      icon: 'trophy',
+      color: 'var(--green)',
+      line: `${leader.displayName} took ${leader.wordsFound} of ${rounds.length} words`,
+      note,
+    };
+  }
+
+  // Nothing found, so the lead came from placements: rank order still scores.
+  const closestRounds = rounds.filter((r) =>
+    r.entries.some((e) => e.playerId === leader.playerId && e.placement === 1),
+  ).length;
+  return {
+    icon: 'snowflake',
+    color: 'var(--orange)',
+    line:
+      closestRounds > 0
+        ? `${leader.displayName} found none of the ${rounds.length} words, but was closest in ${closestRounds}`
+        : `${leader.displayName} won on points without finding a word`,
+    note,
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * One round of one player's path
  * ------------------------------------------------------------------ */
 
@@ -62,9 +327,9 @@ function RoundPath({
 }) {
   const foundAt = entry?.foundAt ?? null;
   const bestRank = path?.bestRank ?? entry?.bestRank ?? null;
-  // The summary row carries the timing, the path carries the flag. Reading only
-  // one leaves a hole: a player with no summary row still has a path, and a
-  // co-op find lands on the team rather than on a clock.
+  // The summary row carries the timing, the path carries the flag, and either
+  // can be missing on its own: an eliminated player drops out of later summaries
+  // while their guesses stay in the replay.
   const found = foundAt !== null || (path?.found ?? false);
   const outcome = found
     ? foundAt !== null
@@ -244,6 +509,9 @@ export function Results({ room }: { room: RoomState }) {
     return map;
   }, [replay]);
 
+  // The line that says why. Derived once — a result never changes after it lands.
+  const verdict = useMemo(() => (result ? buildVerdict(result) : null), [result]);
+
   const openPath = useCallback((playerId: string) => {
     unlockAudio();
     play('click');
@@ -351,6 +619,38 @@ export function Results({ room }: { room: RoomState }) {
         </div>
       </motion.header>
 
+      {/* ---------------------------------------------------------- verdict
+          The scores say who; this says why. It sits above the standings
+          because it is the sentence somebody would say out loud about the
+          match, and the table underneath is only the evidence for it. */}
+      {verdict && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.06 }}
+          className="panel row"
+          style={{
+            gap: 'var(--s2)',
+            padding: 'var(--s2) var(--s3)',
+            alignItems: verdict.note ? 'flex-start' : 'center',
+          }}
+        >
+          <span className="row" style={{ flex: 'none', paddingTop: verdict.note ? 3 : 0 }}>
+            <ModeIcon name={verdict.icon} size={15} color={verdict.color} />
+          </span>
+          <div className="col grow" style={{ gap: 1 }}>
+            <span className="bold" style={{ fontSize: 14.5 }}>
+              {verdict.line}
+            </span>
+            {verdict.note && (
+              <span className="dim thin" style={{ fontSize: 12.5 }}>
+                {verdict.note}
+              </span>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       {/* -------------------------------------------------------- standings */}
       <Section
         title="Standings"
@@ -358,7 +658,7 @@ export function Results({ room }: { room: RoomState }) {
       >
         {/* Capped rather than left to grow: a full lobby must not push the
             round list off a 680px screen. */}
-        <div className="col" style={{ gap: 'var(--s1)', maxHeight: 216, overflowY: 'auto' }}>
+        <div className="col" style={{ gap: 'var(--s1)', maxHeight: 190, overflowY: 'auto' }}>
           {result.entries.map((entry, i) => {
             const delta = ratingDelta(entry);
             const isMe = entry.playerId === user?.id;
@@ -439,17 +739,16 @@ export function Results({ room }: { room: RoomState }) {
         action={<span className="chip chip--brand">{modeLabel(result.mode)}</span>}
       >
         {/* Marathon runs to 20 rounds, so this scrolls inside itself. */}
-        <div className="col" style={{ gap: 'var(--s1)', maxHeight: 152, overflowY: 'auto' }}>
+        <div className="col" style={{ gap: 'var(--s1)', maxHeight: 132, overflowY: 'auto' }}>
           {result.rounds.length === 0 ? (
             <span className="faint thin" style={{ fontSize: 13 }}>
               the match ended before a round finished
             </span>
           ) : (
             result.rounds.map((round) => {
-              const solvers = round.entries.filter((e) => e.foundAt !== null);
-              const solvedBy = solvers.length
-                ? `found by ${solvers.map((s) => s.displayName).join(', ')}`
-                : 'nobody found it';
+              // Who took it and how cheaply, or who came nearest and by how far.
+              const recap = roundRecap(round);
+              const recapTitle = recap.detail ? `${recap.who} — ${recap.detail}` : recap.who;
               return (
                 <div
                   key={round.round}
@@ -473,10 +772,25 @@ export function Results({ room }: { room: RoomState }) {
                   <span
                     className="grow dim thin truncate"
                     style={{ fontSize: 12.5 }}
-                    title={solvedBy}
+                    title={recapTitle}
                   >
-                    {solvedBy}
+                    {recap.who}
                   </span>
+
+                  {/* The count or the distance, in its own column so a long name
+                      can never eat the only number on the row. */}
+                  {recap.detail !== '' && (
+                    <span
+                      className="mono"
+                      style={{
+                        flex: 'none',
+                        fontSize: 12,
+                        color: recap.found ? 'var(--green)' : 'var(--text-faint)',
+                      }}
+                    >
+                      {recap.detail}
+                    </span>
+                  )}
 
                   {round.eliminated.length > 0 && (
                     <span

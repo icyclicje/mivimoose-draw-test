@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { heatFraction, type FeedEntry, type GuessResult, type RoomPlayer, type RoomState } from '@mivimoose/shared';
 import { bandColor, cx, formatClock, formatRank, modeLabel } from '../lib/format';
@@ -7,6 +7,27 @@ import { Avatar } from './ui';
 /* ------------------------------------------------------------------ *
  * Guess row
  * ------------------------------------------------------------------ */
+
+/**
+ * What gives up width first when a row does not fit.
+ *
+ * Flex shares the shortfall in proportion to shrink x current width, so these
+ * numbers have to sit orders apart for the priority to actually hold. Reading
+ * order of who yields: the quiet "typed" note, then the line about who played
+ * the word first, then the owner chip, and the word only once everything else
+ * has collapsed. The rank is not in this table at all — it is `flex: none`,
+ * because a row whose number has been squeezed off the end has lost the one
+ * thing it exists to say.
+ */
+const SHRINK = { word: 1, owner: 10, claim: 80, typed: 500 } as const;
+
+/** The commentary beside a word: same size and shrink behaviour, hue varies. */
+const noteStyle = (shrink: number, color: string): CSSProperties => ({
+  flex: `0 ${shrink} auto`,
+  minWidth: 0,
+  fontSize: 12.5,
+  color,
+});
 
 /**
  * One guess, built the way Contexto builds it: a flat track, a colour bar whose
@@ -23,13 +44,22 @@ import { Avatar } from './ui';
 export function GuessRow({
   guess,
   pinned,
+  ownerName,
 }: {
   guess: GuessResult;
   /** Rendered as the pinned copy above the list rather than inside it. */
   pinned?: boolean;
+  /** Who played it, on a shared board. Left off when every row is yours. */
+  ownerName?: string;
 }) {
   const color = bandColor(guess.band);
   const found = guess.rank === 1;
+  // The word ranked is not always the word typed. Kept on the row itself when
+  // there is room, and on the word's tooltip always, so a plural or a British
+  // spelling never silently turns into something else.
+  const typedNote = guess.normalizedFrom
+    ? `You typed ${guess.normalizedFrom}, ranked as ${guess.word}`
+    : undefined;
 
   return (
     <motion.li
@@ -38,6 +68,11 @@ export function GuessRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
       className={cx('guess', found && 'guess--found', guess.repeat && 'guess--repeat')}
+      // Shorter than the stylesheet default so a few more rows clear the fold.
+      // Text sizes are untouched: 17px in a 34px box still has room to breathe.
+      // The pinned copy keeps its full height — it answers "what did that word
+      // do?" and should not read as just another line in the list.
+      style={{ height: pinned ? undefined : 34 }}
     >
       <motion.div
         className="guess__bar"
@@ -49,8 +84,50 @@ export function GuessRow({
         style={{ background: color }}
       />
       <div className="guess__content">
+        {/* Owner first, as a chip: leading with the name gives the eye one
+            column for "whose is this" instead of a name column squeezed in
+            beside the word. The cap is a share of the row rather than a fixed
+            width, so ordinary names show in full and only a genuinely long one
+            is trimmed. */}
+        {ownerName && (
+          <span
+            className="chip"
+            title={ownerName}
+            style={{
+              flex: `0 ${SHRINK.owner} auto`,
+              minWidth: 0,
+              maxWidth: '34%',
+              height: 18,
+              fontSize: 11,
+              // One step up from the row's own ground so the chip still reads
+              // where the heat bar runs underneath it.
+              background: 'var(--surface-3)',
+            }}
+          >
+            {/* .chip is a flex container and text-overflow does not apply to
+                one, so the name needs its own block box to ellipsis inside. */}
+            <span className="truncate" style={{ minWidth: 0 }}>
+              {ownerName}
+            </span>
+          </span>
+        )}
 
-        <span className="guess__word truncate">{guess.word}</span>
+        <span
+          className="guess__word truncate"
+          style={{ flex: `0 ${SHRINK.word} auto`, minWidth: 0 }}
+          title={typedNote}
+        >
+          {guess.word}
+        </span>
+
+        {/* The server ranks a resolved form — "harbor" for a typed "harbours".
+            Naming what you typed stops that reading as the game ignoring you,
+            while the ranked word stays the loud half of the pair. */}
+        {guess.normalizedFrom && (
+          <span className="truncate" style={noteStyle(SHRINK.typed, 'var(--text-dim)')} title={typedNote}>
+            typed {guess.normalizedFrom}
+          </span>
+        )}
 
         {guess.isHint && (
           <span className="chip chip--accent" style={{ height: 19, fontSize: 10.5, flex: 'none' }}>
@@ -64,7 +141,8 @@ export function GuessRow({
         {guess.repeat && (
           <span
             className="truncate"
-            style={{ fontSize: 12.5, color: 'var(--text-dim)', flex: '0 1 auto', minWidth: 0 }}
+            style={noteStyle(SHRINK.claim, 'var(--text-dim)')}
+            title="You already guessed this word."
           >
             You already guessed this word.
           </span>
@@ -73,14 +151,17 @@ export function GuessRow({
         {guess.stolenFrom && !guess.repeat && (
           <span
             className="truncate"
-            style={{ fontSize: 12.5, color: 'var(--pink)', flex: '0 1 auto', minWidth: 0 }}
+            style={noteStyle(SHRINK.claim, 'var(--pink)')}
             title={`${guess.stolenFrom.displayName} played this word first`}
           >
             {guess.stolenFrom.displayName} guessed this word before you.
           </span>
         )}
 
-        <span className="guess__rank">{found ? 1 : formatRank(guess.rank)}</span>
+        {/* Never shrinks: the rank is the reason the row exists. */}
+        <span className="guess__rank" style={{ flex: 'none' }}>
+          {found ? 1 : formatRank(guess.rank)}
+        </span>
       </div>
     </motion.li>
   );
@@ -105,6 +186,8 @@ export function GuessList({
   latestGuess,
   pulse = 0,
   emptyHint,
+  showOwners = false,
+  nameFor,
 }: {
   guesses: GuessResult[];
   latestId?: string | null;
@@ -114,6 +197,10 @@ export function GuessList({
   /** Changes on every submission so a repeated word still re-flashes. */
   pulse?: number;
   emptyHint?: string;
+  /** Shared boards — co-op, or full visibility — where the rows come from more
+   *  than one player and each needs a name on it. */
+  showOwners?: boolean;
+  nameFor?: (playerId: string) => string;
 }) {
   const latest = useMemo(() => {
     if (!latestId) return undefined;
@@ -123,9 +210,12 @@ export function GuessList({
 
   const sorted = useMemo(() => [...guesses].sort((a, b) => a.rank - b.rank), [guesses]);
 
+  const ownerOf = (guess: GuessResult) =>
+    showOwners && nameFor ? nameFor(guess.playerId) : undefined;
+
   if (!guesses.length) {
     return (
-      <div className="faint" style={{ padding: '24px 8px', textAlign: 'center', fontSize: 14 }}>
+      <div className="faint" style={{ padding: 'var(--s6) var(--s2)', textAlign: 'center', fontSize: 14 }}>
         {emptyHint ?? 'Nothing guessed yet.'}
       </div>
     );
@@ -139,6 +229,7 @@ export function GuessList({
             <GuessRow
               key={`pinned-${latest.id}-${pulse}`}
               guess={latest}
+              ownerName={ownerOf(latest)}
               pinned
             />
           </ul>
@@ -158,10 +249,7 @@ export function GuessList({
       >
         <AnimatePresence initial={false}>
           {sorted.map((guess) => (
-            <GuessRow
-              key={guess.id}
-              guess={guess}
-            />
+            <GuessRow key={guess.id} guess={guess} ownerName={ownerOf(guess)} />
           ))}
         </AnimatePresence>
       </ul>

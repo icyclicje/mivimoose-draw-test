@@ -69,6 +69,8 @@ export interface PlayerState {
   totalGuesses: number;
   /** Words taken that an opponent had already played. */
   stolenWords: number;
+  /** Consecutive guesses in the green band. Reset by anything colder. */
+  greenStreak: number;
   placements: number[];
   ratingBefore: number | null;
 
@@ -129,6 +131,15 @@ export class Room {
   rounds: RoundSummary[] = [];
   result: MatchResult | null = null;
   matchId: string | null = null;
+  /**
+   * Secrets chosen by the server rather than drawn from the pool.
+   *
+   * Deliberately NOT part of `settings`: settings are serialised to every
+   * client, so a daily co-op room would show the host the answer. This stays
+   * on the room object and never leaves the server.
+   */
+  forcedSecrets: string[] | null = null;
+
   /** Flat guess log for the whole match, kept for persistence and replays. */
   matchGuessLog: {
     userId: string;
@@ -280,6 +291,7 @@ export class Room {
       wordsFound: 0,
       totalGuesses: 0,
       stolenWords: 0,
+      greenStreak: 0,
       placements: [],
       ratingBefore: null,
       guesses: [],
@@ -435,7 +447,11 @@ export class Room {
     this.matchGuessLog = [];
 
     const totalRounds = settings.rounds;
-    if (settings.customWords?.length) {
+    if (this.forcedSecrets?.length) {
+      // Server-chosen words (the daily co-op room). Takes priority over
+      // everything, and never round-trips through settings.
+      this.secrets = this.forcedSecrets.slice(0, totalRounds);
+    } else if (settings.customWords?.length) {
       const shuffled = [...settings.customWords];
       // Deterministic shuffle when a seed is set so a custom game replays exactly.
       const seed = settings.seed ?? this.matchId;
@@ -461,6 +477,7 @@ export class Room {
       player.wordsFound = 0;
       player.totalGuesses = 0;
       player.stolenWords = 0;
+      player.greenStreak = 0;
       player.placements = [];
       player.streak = 0;
       player.ready = false;
@@ -626,12 +643,26 @@ export class Room {
     const previous = player.guesses.find((g) => g.word === resolved.word);
     if (previous) return { ...previous, repeat: true };
 
+    // Somebody else got there first, and this room closes claimed words. You
+    // are told who took it and nothing else — the rank stays theirs, which is
+    // what makes being second to a word actually cost something. No guess is
+    // charged: a word you are not allowed to play is not a turn you took.
+    const heldBy = this.claimed.get(resolved.word);
+    if (heldBy && heldBy.playerId !== player.user.id && this.settings.lockClaimedWords) {
+      throw new GuessRejected(
+        'already-guessed',
+        this.settings.showStolenWords
+          ? `${heldBy.displayName} guessed this word before you.`
+          : 'Someone already played that word.',
+      );
+    }
+
     const rank = rankOf(this.table, resolved.index);
     if (rank === null) {
       throw new GuessRejected('unknown-word', `"${resolved.word}" is too obscure to rank`);
     }
 
-    return this.applyGuess(player, resolved.word, rank, false);
+    return this.applyGuess(player, resolved.word, rank, false, resolved.normalizedFrom);
   }
 
   hint(userId: string): GuessResult {
@@ -656,7 +687,13 @@ export class Room {
     return result;
   }
 
-  private applyGuess(player: PlayerState, word: string, rank: number, isHint: boolean): GuessResult {
+  private applyGuess(
+    player: PlayerState,
+    word: string,
+    rank: number,
+    isHint: boolean,
+    normalizedFrom: string | null = null,
+  ): GuessResult {
     const now = Date.now();
     const elapsed = now - this.roundStartedAt;
 
@@ -676,6 +713,7 @@ export class Room {
       stolenFrom,
       repeat: false,
       isHint,
+      normalizedFrom,
     };
 
     player.guesses.push(result);
@@ -1103,12 +1141,48 @@ export class Room {
       }
     }
 
+    // A run of genuinely warm guesses is worth calling out on its own: it means
+    // they have found the right neighbourhood, which is the moment a round
+    // stops being random and starts being a race.
+    const GREEN = 300;
+    if (rank <= GREEN) {
+      player.greenStreak += 1;
+      if (player.greenStreak === 3) {
+        this.emitStatusTo(player.user.id, 'three green in a row — you are on it', 'great', 6, 3800);
+      } else if (player.greenStreak >= 5 && player.greenStreak % 2 === 1) {
+        this.emitStatusTo(
+          player.user.id,
+          `${player.greenStreak} green in a row`,
+          'great',
+          6,
+          3400,
+        );
+      }
+    } else {
+      player.greenStreak = 0;
+    }
+
     // Theirs. Only when the room already shows opponent ranks.
     const canSeeRanks =
       this.settings.mode === 'coop' ||
       this.settings.visibility === 'full' ||
       this.settings.visibility === 'best';
     if (!improved || !canSeeRanks) return;
+
+    // A runaway lead. Compared against the best of everyone else rather than
+    // an absolute threshold, so it fires when someone is genuinely ahead of
+    // this room rather than whenever a low number appears.
+    const rivalBest = Math.min(
+      ...this.contenders
+        .filter((p) => p.user.id !== player.user.id)
+        .map((p) => p.bestRank ?? Number.POSITIVE_INFINITY),
+    );
+    const runaway =
+      Number.isFinite(rivalBest) && rivalBest / rank >= 5 && rank <= 2000 && this.contenders.length > 1;
+    if (runaway) {
+      this.emitStatus(`${name} is well ahead — ${away} away`, 'rival', 7, 4000);
+      return;
+    }
 
     if (rank <= 25) {
       this.emitStatus(`${name} is ${away} away`, 'rival', 5, 3600);
@@ -1213,6 +1287,10 @@ export class Room {
       lastRound: this.phase === 'roundEnd' || this.phase === 'matchEnd' ? (this.rounds[this.rounds.length - 1] ?? null) : null,
       feed: this.feed,
       autoStart: this.managed,
+      secretLength:
+        this.settings.showWordLength && this.table && this.phase !== 'lobby'
+          ? this.table.secret.length
+          : null,
       teamGuessesLeft: this.teamGuessesLeft,
       result: this.result,
     };

@@ -109,6 +109,10 @@ async function main() {
     customWords: ['harbor'],
     rounds: 1,
     roundSeconds: 90,
+    // Classic now closes claimed words by default. This suite is checking the
+    // marker path, so opt out of the lock explicitly rather than letting a
+    // default change silently rewrite what is being tested.
+    lockClaimedWords: false,
   });
   check('room created for the invite', created.ok, created.error ?? '');
 

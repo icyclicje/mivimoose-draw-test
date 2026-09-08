@@ -83,6 +83,16 @@ export interface GameSettings {
   endOnFirstFind: boolean;
   /** Mark a word an opponent already played with their name. */
   showStolenWords: boolean;
+  /**
+   * A word an opponent has already played is closed to you.
+   *
+   * On in public games: the race is for the word, so being second to it should
+   * cost you the guess rather than quietly handing you their rank. You are told
+   * who took it. Off, and you may play it anyway and the row is just marked.
+   */
+  lockClaimedWords: boolean;
+  /** Show how many letters the answer has, at the top of the board. */
+  showWordLength: boolean;
   /** Ranked matches move Elo. Only meaningful for duel/classic. */
   ranked: boolean;
   allowSpectators: boolean;
@@ -149,6 +159,12 @@ export interface GuessResult {
   /** True when the guess is a repeat by the same player. */
   repeat: boolean;
   isHint: boolean;
+  /**
+   * What was typed, when it differed from the word actually ranked — "harbours"
+   * resolving to "harbor". Null when the typed word was used as-is, which is
+   * the case for anything already in the 200k list.
+   */
+  normalizedFrom: string | null;
 }
 
 export type GuessErrorCode =
@@ -287,6 +303,8 @@ export interface RoomState {
    * While that countdown is running `deadline` is when it fires.
    */
   autoStart: boolean;
+  /** Letters in the answer, when the room is set to reveal that. */
+  secretLength: number | null;
   /** coop only. */
   teamGuessesLeft: number | null;
   /** Set once the match is over. */
@@ -384,6 +402,13 @@ export interface ClientToServerEvents {
     ack: (r: Ack<{ code: string }>) => void,
   ) => void;
   'room:quickplay': (payload: { mode: GameMode }, ack: (r: Ack<{ code: string }>) => void) => void;
+  /**
+   * A co-op room playing today's daily word, so you can work it out with
+   * friends instead of alone. The word is chosen server-side and never appears
+   * in the room settings — otherwise the host could read the answer off their
+   * own lobby.
+   */
+  'room:dailyCoop': (ack: (r: Ack<{ code: string }>) => void) => void;
   /**
    * Join the room bound to this Discord activity instance, creating it if this
    * is the first person in the voice channel to open the Activity. This is the

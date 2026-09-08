@@ -103,13 +103,15 @@ async function main() {
   const anyRanked = seats.length > 0 && host.state?.players.some((p) => p.bestRank !== null);
   check('guesses registered on the board', anyRanked);
 
-  // A word another player already burned must come back tagged.
+  // Classic closes claimed words by default, so a word another player already
+  // burned is refused rather than ranked — and the refusal names them. (The
+  // marker-only variant, with the lock turned off, lives in smoke-rules.)
   const stealer = seats[1];
   const steal = await ask(stealer.socket, 'game:guess', { word: WORDS[0] });
   check(
-    'STEAL: duplicate word is attributed to the first player',
-    steal.ok && steal.data?.stolenFrom?.displayName === `T-${seats[0].name}`,
-    JSON.stringify(steal.data?.stolenFrom),
+    'a word another player took is closed, and names them',
+    !steal.ok && steal.code === 'already-guessed' && steal.error?.includes(`T-${seats[0].name}`),
+    steal.error ?? JSON.stringify(steal.data),
   );
 
   console.log('\nwaiting for the clock to run out…\n');

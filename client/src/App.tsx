@@ -18,7 +18,7 @@ import { Results } from './screens/Results';
 import { Statistics } from './screens/Statistics';
 import { setActivity } from './lib/discord';
 import { cx, modeLabel } from './lib/format';
-import { play, unlockAudio } from './lib/sound';
+import { play, setMusicMood, unlockAudio } from './lib/sound';
 import { useStore, type Tab } from './lib/store';
 
 const TABS: { id: Tab; label: string }[] = [
@@ -42,6 +42,15 @@ export default function App() {
   useEffect(() => {
     void boot();
   }, [boot]);
+
+  // Competitive-chill while a round is live, the calmer bed everywhere else.
+  // Keyed on the room phase rather than the tab, so opening the leaderboard
+  // mid-match does not swap the music out from under you.
+  const inRound =
+    room?.phase === 'countdown' || room?.phase === 'playing' || room?.phase === 'roundEnd';
+  useEffect(() => {
+    setMusicMood(inRound ? 'game' : 'menu');
+  }, [inRound]);
 
   // Mirror what the player is doing onto their Discord presence.
   useEffect(() => {

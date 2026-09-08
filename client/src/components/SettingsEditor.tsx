@@ -293,50 +293,77 @@ export function SettingsEditor({
       </Group>
 
       <Group title="Rules">
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(196px, 1fr))', gap: 'var(--s2)' }}
-        >
-          <Toggle
-            label="End round on first find"
-            hint="off: everyone plays the clock"
-            checked={settings.endOnFirstFind}
-            disabled={locked('endOnFirstFind')}
-            onChange={(endOnFirstFind) => onChange({ endOnFirstFind })}
-          />
-          <Toggle
-            label="Ranked"
-            hint="duel and classic only"
-            checked={settings.ranked}
-            disabled={locked('ranked') || (settings.mode !== 'duel' && settings.mode !== 'classic')}
-            onChange={(ranked) => onChange({ ranked })}
-          />
-          <Toggle
-            label="Allow spectators"
-            hint="watch without playing"
-            checked={settings.allowSpectators}
-            disabled={locked('allowSpectators')}
-            onChange={(allowSpectators) => onChange({ allowSpectators })}
-          />
-          <Toggle
-            label="Private room"
-            hint="join by code only"
-            checked={settings.private}
-            disabled={locked('private')}
-            onChange={(isPrivate) => onChange({ private: isPrivate })}
-          />
-          <Toggle
-            label="Chat"
-            checked={settings.chatEnabled}
-            disabled={locked('chatEnabled')}
-            onChange={(chatEnabled) => onChange({ chatEnabled })}
-          />
-          <Toggle
-            label="Emotes"
-            checked={settings.emotesEnabled}
-            disabled={locked('emotesEnabled')}
-            onChange={(emotesEnabled) => onChange({ emotesEnabled })}
-          />
+        <div className="col" style={{ gap: 'var(--s2)' }}>
+          {/* The two word rules change what a round actually is, so each needs a
+              whole sentence to explain. In the 196px cells below those sentences
+              run to four lines and stretch every short-hint toggle sharing the
+              grid row to match — and a seventh tile turns a tidy two-row grid
+              into three. A wider pair of cells keeps both hints readable and
+              leaves the grid beneath at six. */}
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(248px, 1fr))', gap: 'var(--s2)' }}
+          >
+            <Toggle
+              label="Close words an opponent has played"
+              hint="Being second to a word costs you the guess. Off, you can still play it and the row is just marked."
+              checked={settings.lockClaimedWords}
+              disabled={locked('lockClaimedWords')}
+              onChange={(lockClaimedWords) => onChange({ lockClaimedWords })}
+            />
+            <Toggle
+              label="Show how many letters"
+              hint="The answer's length is shown at the top of the board."
+              checked={settings.showWordLength}
+              disabled={locked('showWordLength')}
+              onChange={(showWordLength) => onChange({ showWordLength })}
+            />
+          </div>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(196px, 1fr))', gap: 'var(--s2)' }}
+          >
+            <Toggle
+              label="End round on first find"
+              hint="off: everyone plays the clock"
+              checked={settings.endOnFirstFind}
+              disabled={locked('endOnFirstFind')}
+              onChange={(endOnFirstFind) => onChange({ endOnFirstFind })}
+            />
+            <Toggle
+              label="Ranked"
+              hint="duel and classic only"
+              checked={settings.ranked}
+              disabled={locked('ranked') || (settings.mode !== 'duel' && settings.mode !== 'classic')}
+              onChange={(ranked) => onChange({ ranked })}
+            />
+            <Toggle
+              label="Allow spectators"
+              hint="watch without playing"
+              checked={settings.allowSpectators}
+              disabled={locked('allowSpectators')}
+              onChange={(allowSpectators) => onChange({ allowSpectators })}
+            />
+            <Toggle
+              label="Private room"
+              hint="join by code only"
+              checked={settings.private}
+              disabled={locked('private')}
+              onChange={(isPrivate) => onChange({ private: isPrivate })}
+            />
+            <Toggle
+              label="Chat"
+              checked={settings.chatEnabled}
+              disabled={locked('chatEnabled')}
+              onChange={(chatEnabled) => onChange({ chatEnabled })}
+            />
+            <Toggle
+              label="Emotes"
+              checked={settings.emotesEnabled}
+              disabled={locked('emotesEnabled')}
+              onChange={(emotesEnabled) => onChange({ emotesEnabled })}
+            />
+          </div>
         </div>
       </Group>
 
@@ -432,6 +459,8 @@ export function SettingsSummary({ settings }: { settings: GameSettings }) {
     settings.category !== 'any' ? settings.category : null,
     settings.guessLimit ? `${settings.guessLimit} guess cap` : null,
     settings.hints ? `${settings.hints} hints` : 'no hints',
+    settings.lockClaimedWords ? 'closed words' : null,
+    settings.showWordLength ? 'letter count' : null,
     settings.customWords ? 'custom words' : null,
     settings.seed ? `seed ${settings.seed}` : null,
   ].filter(Boolean);

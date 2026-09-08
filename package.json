@@ -24,7 +24,7 @@
     "build:index": "npm run build:index -w @mivimoose/server",
     "tunnel": "cloudflared tunnel --url http://localhost:3001",
     "typecheck": "npm run typecheck -w @mivimoose/shared && npm run typecheck -w @mivimoose/server && npm run typecheck -w @mivimoose/client",
-    "smoke": "node scripts/smoke-duel.mjs && node scripts/smoke-lobby.mjs && node scripts/smoke-modes.mjs && node scripts/smoke-features.mjs && node scripts/smoke-social.mjs",
+    "smoke": "node scripts/smoke-duel.mjs && node scripts/smoke-lobby.mjs && node scripts/smoke-modes.mjs && node scripts/smoke-features.mjs && node scripts/smoke-social.mjs && node scripts/smoke-rules.mjs",
     "smoke:duel": "node scripts/smoke-duel.mjs",
     "smoke:lobby": "node scripts/smoke-lobby.mjs",
     "smoke:modes": "node scripts/smoke-modes.mjs",
@@ -32,7 +32,8 @@
     "setup:words": "npm run setup:words -w @mivimoose/server",
     "smoke:features": "node scripts/smoke-features.mjs",
     "smoke:social": "node scripts/smoke-social.mjs",
-    "smoke:stats": "node scripts/smoke-stats.mjs"
+    "smoke:stats": "node scripts/smoke-stats.mjs",
+    "smoke:rules": "node scripts/smoke-rules.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
