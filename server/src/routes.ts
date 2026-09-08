@@ -35,6 +35,16 @@ import {
 } from './db.js';
 import { dailyWordFor, todayKey } from './engine/lexicon.js';
 import { getRankTable, rankerStats, rankOf, resolveWord } from './engine/ranker.js';
+import {
+  friendListFor,
+  matchReplay,
+  onlineCount,
+  removeFriend,
+  requestFriend,
+  respondToFriend,
+  searchPlayers,
+  serverStats,
+} from './social.js';
 import { log } from './log.js';
 
 /**
@@ -434,6 +444,8 @@ export function createApiRouter() {
       progress: rankProgress(rank, table.depth),
       at: Date.now(),
       playerId: userId,
+      // The daily is solo, so nobody can have got there first.
+      stolenFrom: null,
       repeat: false,
       isHint: false,
     };
@@ -587,6 +599,87 @@ export function createApiRouter() {
       };
     });
     res.json({ words: checked, usable: checked.filter((c) => c.ok).map((c) => c.word) });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Friends
+   * ---------------------------------------------------------------- */
+
+  router.get('/friends', requireAuth, async (req, res) => {
+    res.json(await friendListFor(req.session!.sub));
+  });
+
+  router.get('/friends/search', requireAuth, async (req, res) => {
+    const q = z.string().max(40).catch('').parse(req.query.q);
+    res.json({ results: await searchPlayers(q, req.session!.sub) });
+  });
+
+  router.post('/friends/:userId', requireAuth, async (req, res) => {
+    const result = await requestFriend(req.session!.sub, req.params.userId);
+    if (!result.ok) {
+      res.status(409).json({ error: result.error });
+      return;
+    }
+    res.json({ status: result.status });
+  });
+
+  router.post('/friends/:userId/respond', requireAuth, async (req, res) => {
+    const accept = z.boolean().catch(true).parse(req.body?.accept);
+    const result = await respondToFriend(req.session!.sub, req.params.userId, accept);
+    if (!result.ok) {
+      res.status(409).json({ error: result.error });
+      return;
+    }
+    res.json({ status: result.status });
+  });
+
+  router.delete('/friends/:userId', requireAuth, async (req, res) => {
+    const result = await removeFriend(req.session!.sub, req.params.userId);
+    if (!result.ok) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.status(204).end();
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Presence and statistics
+   * ---------------------------------------------------------------- */
+
+  /** Open to everyone: the headcount shown on the home screen. */
+  router.get('/presence', (_req, res) => {
+    res.json({ online: onlineCount() });
+  });
+
+  /**
+   * The full graph is moderator-only. It is not sensitive so much as noisy —
+   * a public concurrency chart invites people to read a quiet Tuesday as a
+   * verdict on the game.
+   */
+  router.get('/stats', requireAuth, async (req, res) => {
+    const me = await prisma.user.findUnique({
+      where: { id: req.session!.sub },
+      select: { role: true },
+    });
+    if (me?.role !== 'moderator' && me?.role !== 'admin') {
+      res.status(403).json({ error: 'Moderators only' });
+      return;
+    }
+    const range = z.enum(['day', 'week', 'month']).catch('day').parse(req.query.range);
+    res.json(await serverStats(range));
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Match replay
+   * ---------------------------------------------------------------- */
+
+  router.get('/match/:matchId/replay', requireAuth, async (req, res) => {
+    const replay = await matchReplay(req.params.matchId);
+    if (!replay) {
+      res.status(404).json({ error: 'No such match' });
+      return;
+    }
+    res.json(replay);
   });
 
   return router;

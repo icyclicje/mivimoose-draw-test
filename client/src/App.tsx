@@ -1,24 +1,31 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Wordmark } from './components/Logo';
+import { ModeIcon } from './components/ModeIcon';
+import { SoundToggle } from './components/SoundToggle';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { Avatar, Toasts } from './components/ui';
 import { Boot } from './screens/Boot';
 import { Daily } from './screens/Daily';
+import { Friends } from './screens/Friends';
 import { Game } from './screens/Game';
 import { Home } from './screens/Home';
+import { Info } from './screens/Info';
 import { Leaderboard } from './screens/Leaderboard';
 import { Lobby } from './screens/Lobby';
 import { Profile } from './screens/Profile';
 import { Results } from './screens/Results';
+import { Statistics } from './screens/Statistics';
 import { setActivity } from './lib/discord';
 import { cx, modeLabel } from './lib/format';
+import { play, unlockAudio } from './lib/sound';
 import { useStore, type Tab } from './lib/store';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'play', label: 'Play' },
   { id: 'daily', label: 'Daily' },
   { id: 'ranks', label: 'Ranks' },
+  { id: 'friends', label: 'Friends' },
   { id: 'profile', label: 'You' },
 ];
 
@@ -30,6 +37,7 @@ export default function App() {
   const tab = useStore((s) => s.tab);
   const setTab = useStore((s) => s.setTab);
   const connected = useStore((s) => s.connected);
+  const invites = useStore((s) => s.invites);
 
   useEffect(() => {
     void boot();
@@ -51,17 +59,36 @@ export default function App() {
     void setActivity(detail, state);
   }, [room?.mode, room?.phase, room?.round, room?.totalRounds, room?.code, room]);
 
+  // Any click anywhere is a good enough gesture to let audio start. Browsers
+  // will not resume an AudioContext without one, and waiting for a button that
+  // happens to call unlockAudio() means the first few sounds are silently lost.
+  const unlocked = useRef(false);
+  useEffect(() => {
+    if (unlocked.current) return;
+    const onFirst = () => {
+      unlocked.current = true;
+      unlockAudio();
+      window.removeEventListener('pointerdown', onFirst);
+      window.removeEventListener('keydown', onFirst);
+    };
+    window.addEventListener('pointerdown', onFirst);
+    window.addEventListener('keydown', onFirst);
+    return () => {
+      window.removeEventListener('pointerdown', onFirst);
+      window.removeEventListener('keydown', onFirst);
+    };
+  }, []);
+
   if (status !== 'ready') return <Boot />;
 
   const inMatch = room && room.phase !== 'lobby' && room.phase !== 'matchEnd';
+  const isStaff = user?.role === 'moderator' || user?.role === 'admin';
 
   /**
    * Which screen is showing, as one stable key.
    *
    * Deliberately NOT keyed on room.phase: countdown, playing and roundEnd are
    * all the Game screen, and keying on phase remounted it three times a round.
-   * That threw away the overlay exit animations and reset local state like the
-   * open/closed chat drawer every single round.
    */
   const screenKey =
     tab !== 'play'
@@ -74,8 +101,6 @@ export default function App() {
             ? 'results'
             : 'game';
 
-  // The one thing that must never be hard to find: the way back into a game
-  // you are already in. It is a genuine live status, so it earns a chip.
   const returnLabel = inMatch
     ? 'Return to match'
     : room?.phase === 'matchEnd'
@@ -84,17 +109,22 @@ export default function App() {
         ? `Return to lobby ${room.code}`
         : null;
 
+  const goTo = (next: Tab) => {
+    if (next !== tab) play('click');
+    setTab(next);
+  };
+
   return (
     <div className="app">
       <header className="app__header">
-        <button onClick={() => setTab('play')} aria-label="Mivimoose Guess home" style={{ flex: 'none' }}>
+        <button onClick={() => goTo('play')} aria-label="Mivimoose Guess home" style={{ flex: 'none' }}>
           <Wordmark size={26} />
         </button>
 
         {room && tab !== 'play' && returnLabel && (
           <button
             className={cx('chip', inMatch && 'chip--live')}
-            onClick={() => setTab('play')}
+            onClick={() => goTo('play')}
             title={returnLabel}
             style={{ flex: '0 1 auto', minWidth: 0 }}
           >
@@ -105,25 +135,69 @@ export default function App() {
         <nav className="app__nav">
           {TABS.map((entry) => {
             const active = entry.id === tab;
+            // Invites are time-limited, so the badge belongs where people look
+            // for friends rather than only on the home screen.
+            const badge = entry.id === 'friends' && invites.length > 0 ? invites.length : null;
             return (
               <button
                 key={entry.id}
                 className={cx('tab', active && 'tab--active')}
                 aria-current={active ? 'page' : undefined}
-                onClick={() => setTab(entry.id)}
+                onClick={() => goTo(entry.id)}
               >
                 {entry.label}
+                {badge !== null && (
+                  <span
+                    style={{
+                      marginLeft: 5,
+                      padding: '0 5px',
+                      borderRadius: 'var(--r-pill)',
+                      background: 'var(--accent)',
+                      color: 'var(--bg)',
+                      fontSize: 10,
+                      fontWeight: 'var(--w-bold)',
+                    }}
+                  >
+                    {badge}
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
 
-        <div className="row" style={{ gap: 'var(--s2)', flex: 'none' }}>
+        <div className="row" style={{ gap: 'var(--s1)', flex: 'none' }}>
+          {isStaff && (
+            <button
+              className={cx('btn btn--ghost btn--sm', tab === 'stats' && 'tab--active')}
+              style={{ padding: '0 var(--s2)' }}
+              title="Server statistics"
+              aria-label="Server statistics"
+              onClick={() => goTo('stats')}
+            >
+              <ModeIcon name="chart" size={15} />
+            </button>
+          )}
+          <button
+            className="btn btn--ghost btn--sm"
+            style={{ padding: '0 var(--s2)' }}
+            title="FAQ, terms and privacy"
+            aria-label="FAQ, terms and privacy"
+            onClick={() => goTo('info')}
+          >
+            <ModeIcon name="info" size={15} />
+          </button>
+          <SoundToggle />
           <ThemeSwitcher />
         </div>
 
         {user && (
-          <div className="row" style={{ gap: 'var(--s2)', flex: 'none' }}>
+          <button
+            className="row"
+            onClick={() => goTo('profile')}
+            title={`${user.displayName} — your profile`}
+            style={{ gap: 'var(--s2)', flex: 'none' }}
+          >
             <span
               role="img"
               aria-label={connected ? 'Connected' : 'Reconnecting'}
@@ -138,29 +212,18 @@ export default function App() {
               }}
             />
             <Avatar user={user} size={26} />
-          </div>
+          </button>
         )}
       </header>
 
       <div className="app__body">
         {/*
-          No AnimatePresence around the screen swap, and no exit animation.
-          It used to be `mode="wait"`, which holds the incoming screen back
-          until the outgoing one reports its exit finished — and the outgoing
-          Game screen does not always report it. Its guess rows animate with
-          `layout`, and a layout animation still in flight when the screen is
-          removed can swallow the exit-complete callback. The old screen was
-          then left sitting at opacity 0 with the new one never mounted: a
-          blank page, permanently, with the socket still happily connected.
-
-          It showed up as "the match ended and I got a blank page" and as a
-          game that sometimes never loaded when starting or rejoining, because
-          it depended on whether anything happened to be animating at the
-          moment the screen changed.
-
-          A keyed motion.div still remounts and plays `initial` -> `animate` on
-          every change, so the fade-in survives; only the fade-out is gone, and
-          with it any way for an animation to strand a player.
+          No AnimatePresence around the screen swap and no exit animation. With
+          `mode="wait"` the incoming screen waits for the outgoing one to report
+          its exit finished, and the Game screen does not always report it — its
+          guess rows animate with `layout`, and a layout animation still running
+          when the screen unmounts can swallow the callback. That left the app
+          on a permanently blank page with the socket still connected.
         */}
         <motion.div
           key={screenKey}
@@ -178,7 +241,10 @@ export default function App() {
           {tab === 'play' && room?.phase === 'matchEnd' && <Results room={room} />}
           {tab === 'daily' && <Daily />}
           {tab === 'ranks' && <Leaderboard />}
+          {tab === 'friends' && <Friends />}
           {tab === 'profile' && <Profile />}
+          {tab === 'stats' && <Statistics />}
+          {tab === 'info' && <Info />}
         </motion.div>
       </div>
 

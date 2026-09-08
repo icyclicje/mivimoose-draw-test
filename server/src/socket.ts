@@ -19,6 +19,15 @@ import { log } from './log.js';
 import { GuessRejected, type Room } from './game/Room.js';
 import { RoomManager } from './game/RoomManager.js';
 import { recordMatch } from './persistence.js';
+import {
+  areFriends,
+  clearPresence,
+  friendIdsOf,
+  onlineCount,
+  recordPlayerSample,
+  prunePlayerSamples,
+  setPresence,
+} from './social.js';
 
 interface SocketData {
   user: PublicUser;
@@ -126,11 +135,36 @@ export function createSocketServer(httpServer: HttpServer) {
 
     const currentRoom = (): Room | undefined => manager.findRoomForUser(user.id);
 
+    /** Push this user's current whereabouts into the shared presence map. */
+    const refreshPresence = () => {
+      const room = currentRoom();
+      setPresence(user.id, {
+        user,
+        roomCode: room && !room.settings.private ? room.code : null,
+        activity: room
+          ? room.phase === 'lobby'
+            ? `In a ${MODES[room.settings.mode].name} lobby`
+            : `Playing ${MODES[room.settings.mode].name}`
+          : 'In the menus',
+      });
+    };
+
+    /** Tell this user's friends their list is stale, so it refetches. */
+    const nudgeFriends = () => {
+      void friendIdsOf(user.id)
+        .then((ids) => {
+          for (const id of ids) io.to(`user:${id}`).emit('friends:changed');
+        })
+        .catch(() => undefined);
+    };
+
     const enterRoom = (room: Room, asSpectator = false) => {
       manager.cancelReap(room.code);
       socket.join(`room:${room.code}`);
       room.join(user, socket.id, asSpectator);
       socket.emit('room:state', room.serializeFor(user.id));
+      refreshPresence();
+      nudgeFriends();
     };
 
     const leaveCurrent = () => {
@@ -138,7 +172,12 @@ export function createSocketServer(httpServer: HttpServer) {
       if (!room) return;
       socket.leave(`room:${room.code}`);
       room.removePlayer(user.id, 'left');
+      refreshPresence();
+      nudgeFriends();
     };
+
+    refreshPresence();
+    nudgeFriends();
 
     // A reconnect drops straight back into whatever match was in progress.
     const existing = currentRoom();
@@ -201,7 +240,16 @@ export function createSocketServer(httpServer: HttpServer) {
         manager.findQuickplay(mode) ??
         manager.create({
           host: user,
-          settings: { ...defaultsForMode(mode), maxPlayers: MODES[mode].maxPlayers },
+          settings: {
+            ...defaultsForMode(mode),
+            maxPlayers: MODES[mode].maxPlayers,
+            // Quick match is the ranked ladder. If it did not move Elo there
+            // would be nothing for the rank tiers to measure.
+            ranked: true,
+            // And a public round ends the moment somebody lands it — making
+            // nine people watch a dead clock is the fastest way to lose them.
+            endOnFirstFind: true,
+          },
           guildId: data.guildId,
           managed: true,
         });
@@ -313,11 +361,83 @@ export function createSocketServer(httpServer: HttpServer) {
       ack?.(ok(manager.listPublic()));
     });
 
+    /* -------------------------------------------------------------- *
+     * Friends
+     * -------------------------------------------------------------- */
+
+    socket.on('friend:invite', async (payload: { friendId: string }, ack?: (r: Ack<null>) => void) => {
+      const room = currentRoom();
+      if (!room) return ack?.(fail('You are not in a room to invite anyone to'));
+      if (room.phase !== 'lobby') return ack?.(fail('Invite them before the match starts', 'locked'));
+
+      // Only actual friends, so an invite cannot be used to spam a stranger.
+      const friendId = String(payload?.friendId ?? '');
+      if (!(await areFriends(user.id, friendId))) {
+        return ack?.(fail('You can only invite friends', 'not-friends'));
+      }
+
+      io.to(`user:${friendId}`).emit('invite:received', {
+        id: `${room.code}:${user.id}`,
+        from: user,
+        code: room.code,
+        mode: room.settings.mode,
+        expiresAt: Date.now() + 120_000,
+      });
+      ack?.(ok(null));
+    });
+
+    socket.on('invite:accept', (payload: { code: string }, ack?: (r: Ack<{ code: string }>) => void) => {
+      const code = String(payload?.code ?? '').trim().toUpperCase();
+      const room = manager.get(code);
+      if (!room) return ack?.(fail('That room has closed', 'not-found'));
+      leaveCurrent();
+      enterRoom(room);
+      ack?.(ok({ code: room.code }));
+    });
+
     socket.on('disconnect', () => {
       const room = currentRoom();
       if (room) room.detachSocket(user.id, socket.id);
+      // Only drop presence once every tab this user has is gone.
+      const remaining = io.sockets.adapter.rooms.get(`user:${user.id}`);
+      if (!remaining || remaining.size === 0) {
+        clearPresence(user.id);
+        nudgeFriends();
+      }
     });
   });
 
-  return { io, manager, modes: MODES };
+  /**
+   * Headcount, pushed rather than polled. Ten seconds is frequent enough that
+   * "3 playing" on the home screen feels live, and cheap enough that it costs
+   * nothing.
+   */
+  const presenceTimer = setInterval(() => {
+    const stats = manager.stats();
+    io.emit('presence', {
+      online: onlineCount(),
+      inGame: stats.players,
+      rooms: stats.rooms,
+    });
+  }, 10_000);
+
+  /** The series behind the statistics graph. */
+  const sampleTimer = setInterval(() => {
+    const stats = manager.stats();
+    void recordPlayerSample({
+      online: onlineCount(),
+      inGame: stats.players,
+      rooms: stats.rooms,
+    });
+  }, 2 * 60_000);
+
+  const pruneTimer = setInterval(() => void prunePlayerSamples(), 6 * 60 * 60_000);
+
+  const stopTimers = () => {
+    clearInterval(presenceTimer);
+    clearInterval(sampleTimer);
+    clearInterval(pruneTimer);
+  };
+
+  return { io, manager, modes: MODES, stopTimers };
 }

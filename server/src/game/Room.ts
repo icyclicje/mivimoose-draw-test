@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import type { StatusMessage, StatusTone } from '@mivimoose/shared';
 import {
   bandForRank,
   isTurnBased,
@@ -36,6 +37,10 @@ const AUTO_START_WAIT_MS = 30_000;
 const AUTO_START_FULL_MS = 5_000;
 /** Quick match is a multiplayer front door; one person is not a match. */
 const AUTO_START_MIN_PLAYERS = 2;
+/** Every ready player takes this much off the wait. */
+const READY_BONUS_MS = 6_000;
+/** However many are ready, there is always a beat to notice the match starting. */
+const AUTO_START_FLOOR_MS = 3_000;
 const ROUND_REVIEW_MS = 9000;
 const FEED_LIMIT = 80;
 /** A guess this far out gets you frozen when the setting is on. */
@@ -62,6 +67,8 @@ export interface PlayerState {
   eliminated: boolean;
   wordsFound: number;
   totalGuesses: number;
+  /** Words taken that an opponent had already played. */
+  stolenWords: number;
   placements: number[];
   ratingBefore: number | null;
 
@@ -110,11 +117,14 @@ export class Room {
   teamGuessesLeft: number | null = null;
 
   /**
-   * Every word played this round, mapped to whoever played it first. Nothing
-   * about it reaches the client: it exists only to close a word to everybody
-   * else, and the rejection it produces carries no rank and no name.
+   * Every word played this round, mapped to whoever played it first.
+   *
+   * A claimed word is NOT closed off. You may still play it and you still get
+   * its rank — the row simply records that somebody beat you to it. Blocking
+   * the word instead would hide the one thing the mechanic exists to show:
+   * that two people are working the same trail.
    */
-  claimed = new Map<string, string>();
+  claimed = new Map<string, { playerId: string; displayName: string; rank: number }>();
   feed: FeedEntry[] = [];
   rounds: RoundSummary[] = [];
   result: MatchResult | null = null;
@@ -181,8 +191,22 @@ export class Room {
       return;
     }
 
+    const ready = this.activePlayers.filter((p) => p.ready).length;
     const full = count >= this.settings.maxPlayers;
-    const target = Date.now() + (full ? AUTO_START_FULL_MS : AUTO_START_WAIT_MS);
+
+    // Everyone ready means nobody is waiting for anything. Go.
+    if (ready === count) {
+      this.clearAutoStart();
+      this.start();
+      return;
+    }
+
+    // Otherwise each ready player buys the lobby some time back. Readying up is
+    // the only lever players have on a managed lobby, so it should visibly do
+    // something rather than just colour a name green.
+    const base = full ? AUTO_START_FULL_MS : AUTO_START_WAIT_MS;
+    const wait = Math.max(AUTO_START_FLOOR_MS, base - ready * READY_BONUS_MS);
+    const target = Date.now() + wait;
     if (this.autoStartAt !== null && this.autoStartAt <= target) return;
 
     this.autoStartAt = target;
@@ -254,6 +278,7 @@ export class Room {
       eliminated: false,
       wordsFound: 0,
       totalGuesses: 0,
+      stolenWords: 0,
       placements: [],
       ratingBefore: null,
       guesses: [],
@@ -348,6 +373,23 @@ export class Room {
     const player = this.players.get(userId);
     if (!player || this.phase !== 'lobby') return;
     player.ready = ready;
+
+    if (this.managed) {
+      // Recomputes the countdown, and starts outright once everyone is ready.
+      this.evaluateAutoStart();
+      if (this.phase !== 'lobby') return;
+    } else if (ready) {
+      // A host-run room has no clock, but there is no reason to make everyone
+      // stare at a full lobby waiting for one person to press start.
+      const players = this.activePlayers;
+      const enough = players.length >= MODES[this.settings.mode].minPlayers;
+      if (enough && players.every((p) => p.ready)) {
+        this.pushFeed({ kind: 'system', text: 'Everyone is ready' });
+        this.start();
+        return;
+      }
+    }
+
     this.bus.sync(this);
   }
 
@@ -417,6 +459,7 @@ export class Room {
       player.eliminated = false;
       player.wordsFound = 0;
       player.totalGuesses = 0;
+      player.stolenWords = 0;
       player.placements = [];
       player.streak = 0;
       player.ready = false;
@@ -582,15 +625,6 @@ export class Room {
     const previous = player.guesses.find((g) => g.word === resolved.word);
     if (previous) return { ...previous, repeat: true };
 
-    // Somebody else got there first. They are told that and nothing else —
-    // no rank, no name, not even whether the word was warm. Leaking either
-    // would hand over a free read on an opponent's board, which is exactly
-    // what keeping the boards private is for. It costs no guess, because a
-    // word you are not allowed to play is not a turn you took.
-    if (this.claimed.has(resolved.word)) {
-      throw new GuessRejected('already-guessed', 'Already guessed');
-    }
-
     const rank = rankOf(this.table, resolved.index);
     if (rank === null) {
       throw new GuessRejected('unknown-word', `"${resolved.word}" is too obscure to rank`);
@@ -625,6 +659,11 @@ export class Room {
     const now = Date.now();
     const elapsed = now - this.roundStartedAt;
 
+    // Whoever holds this word already, if it is not you.
+    const claim = this.claimed.get(word);
+    const stolenFrom =
+      claim && claim.playerId !== player.user.id && this.settings.showStolenWords ? claim : null;
+
     const result: GuessResult = {
       id: nanoid(10),
       word,
@@ -633,6 +672,7 @@ export class Room {
       progress: rankProgress(rank, this.table?.depth ?? 60000),
       at: elapsed,
       playerId: player.user.id,
+      stolenFrom,
       repeat: false,
       isHint,
     };
@@ -640,12 +680,23 @@ export class Room {
     player.guesses.push(result);
     player.guessedWords.add(word);
     player.totalGuesses += 1;
+    if (stolenFrom) player.stolenWords += 1;
     if (this.teamGuessesLeft !== null) this.teamGuessesLeft -= 1;
 
-    this.claimed.set(word, player.user.id);
+    // First player to reach a word owns it for the rest of the round.
+    if (!claim) {
+      this.claimed.set(word, {
+        playerId: player.user.id,
+        displayName: player.user.displayName,
+        rank,
+      });
+    }
 
+    const previousBest = player.bestRank;
     const improved = player.bestRank === null || rank < player.bestRank;
     if (improved) player.bestRank = rank;
+
+    if (!isHint) this.announceProgress(player, rank, previousBest, improved);
 
     // Sudden death: a guess that fails to beat the board costs you a strike.
     if (isTurnBased(this.settings.mode) && !isHint) {
@@ -668,6 +719,12 @@ export class Room {
     if (rank === 1) {
       player.foundAt = elapsed;
       player.wordsFound += 1;
+      this.emitStatus(
+        `${player.user.displayName} found it in ${player.guesses.length}`,
+        'great',
+        9,
+        4200,
+      );
       this.pushFeed({
         kind: 'found',
         playerId: player.user.id,
@@ -989,6 +1046,73 @@ export class Room {
     return full;
   }
 
+  /**
+   * A short line the client floats over the board.
+   *
+   * Distinct from the feed on purpose: the feed is a log you can scroll, this
+   * is a nudge you are meant to catch out of the corner of your eye and then
+   * forget. A quiet round with nine silent opponents is the failure mode these
+   * exist to fix.
+   */
+  private emitStatus(text: string, tone: StatusTone, priority = 1, ttl = 3200): void {
+    const message: StatusMessage = { id: nanoid(8), text, tone, ttl, priority };
+    this.bus.toRoom(this.code, 'status', message);
+  }
+
+  /** Same thing, but only the one player sees it. */
+  private emitStatusTo(userId: string, text: string, tone: StatusTone, priority = 1, ttl = 3200): void {
+    const message: StatusMessage = { id: nanoid(8), text, tone, ttl, priority };
+    this.bus.toUser(userId, 'status', message);
+  }
+
+  /**
+   * Turns one guess into the running commentary of the round.
+   *
+   * Two audiences with different rules. You always hear about your own guess,
+   * because it is your feedback loop. Everyone else only hears about it when it
+   * is genuinely notable AND the room's visibility setting allows it — a
+   * "hidden" room would otherwise leak exactly what it is meant to hide.
+   *
+   * Thresholds rather than every guess: a line per guess in a ten-player room
+   * is noise, and noise is what people learn to ignore.
+   */
+  private announceProgress(
+    player: PlayerState,
+    rank: number,
+    previousBest: number | null,
+    improved: boolean,
+  ): void {
+    const name = player.user.displayName;
+    const away = rank.toLocaleString();
+
+    // Yours.
+    if (improved) {
+      if (rank <= 10) {
+        this.emitStatusTo(player.user.id, `${away} away — it is right there`, 'great', 5, 3600);
+      } else if (rank <= 100) {
+        this.emitStatusTo(player.user.id, `${away} away — very warm`, 'great', 4);
+      } else if (rank <= 500) {
+        this.emitStatusTo(player.user.id, `${away} away — getting warm`, 'good', 3);
+      } else if (previousBest !== null && previousBest / rank >= 4) {
+        // A big jump is worth calling out even when the rank is still cold.
+        this.emitStatusTo(player.user.id, `big jump — ${away} away now`, 'good', 3);
+      }
+    }
+
+    // Theirs. Only when the room already shows opponent ranks.
+    const canSeeRanks =
+      this.settings.mode === 'coop' ||
+      this.settings.visibility === 'full' ||
+      this.settings.visibility === 'best';
+    if (!improved || !canSeeRanks) return;
+
+    if (rank <= 25) {
+      this.emitStatus(`${name} is ${away} away`, 'rival', 5, 3600);
+    } else if (rank <= 200) {
+      this.emitStatus(`${name} is closing in — ${away} away`, 'rival', 3);
+    }
+  }
+
   chat(userId: string, text: string): void {
     if (!this.settings.chatEnabled) return;
     const user = this.players.get(userId)?.user ?? this.spectators.get(userId);
@@ -1026,6 +1150,11 @@ export class Room {
     // can watch the rest of the round out. The one live exception to keeping
     // words private, and it costs nothing because their round is over.
     const watching = viewerId !== null && (this.players.get(viewerId)?.foundAt ?? null) !== null;
+    // Two cases where words are open by design rather than by accident:
+    // co-op, where the whole team plays one board and duplicates are supposed
+    // to hurt everybody, and a host explicitly choosing "full" visibility,
+    // whose entire description is that every word is visible to everyone.
+    const shareBoard = this.settings.mode === 'coop' || this.settings.visibility === 'full';
 
     let status: RoomPlayer['status'] = 'lobby';
     if (!player.connected) status = 'disconnected';
@@ -1059,7 +1188,7 @@ export class Room {
       // found it themselves. `visibility` still says how much of a rank the
       // room shares; it no longer says anything about which words were spent
       // getting there.
-      guesses: isSelf || revealAll || watching ? player.guesses : undefined,
+      guesses: isSelf || revealAll || watching || shareBoard ? player.guesses : undefined,
     };
   }
 

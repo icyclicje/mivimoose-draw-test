@@ -12,6 +12,17 @@ export function bandLabel(band: RankBand): string {
   return bandMeta(band).label;
 }
 
+/**
+ * A rank as a distance. In a multiplayer roster "8,002" is a number nobody can
+ * interpret at a glance, while "8,002 away" is immediately a gap you are trying
+ * to close — and "found it" is the obvious end of that scale.
+ */
+export function formatAway(rank: number | null | undefined): string {
+  if (rank === null || rank === undefined) return 'no guesses';
+  if (rank <= 1) return 'found it';
+  return `${rank.toLocaleString()} away`;
+}
+
 export function formatRank(rank: number | null | undefined): string {
   if (rank === null || rank === undefined) return '—';
   return rank.toLocaleString();

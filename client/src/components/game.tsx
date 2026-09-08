@@ -58,15 +58,27 @@ export function GuessRow({
           </span>
         )}
 
+        {/* Two different "you have seen this word before" cases, worded so you
+            can tell them apart without reading twice: one is your own memory
+            slipping, the other is an opponent having beaten you to it. */}
         {guess.repeat && (
           <span
             className="truncate"
             style={{ fontSize: 12.5, color: 'var(--text-dim)', flex: '0 1 auto', minWidth: 0 }}
           >
-            already guessed
+            You already guessed this word.
           </span>
         )}
 
+        {guess.stolenFrom && !guess.repeat && (
+          <span
+            className="truncate"
+            style={{ fontSize: 12.5, color: 'var(--pink)', flex: '0 1 auto', minWidth: 0 }}
+            title={`${guess.stolenFrom.displayName} played this word first`}
+          >
+            {guess.stolenFrom.displayName} guessed this word before you.
+          </span>
+        )}
 
         <span className="guess__rank">{found ? 1 : formatRank(guess.rank)}</span>
       </div>

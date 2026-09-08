@@ -9,15 +9,41 @@ import {
 } from '@mivimoose/shared';
 import { ModeIcon } from '../components/ModeIcon';
 import { SettingsEditor, SettingsSummary } from '../components/SettingsEditor';
-import { EmptyState, Modal, Section, Spinner } from '../components/ui';
+import { Avatar, EmptyState, Modal, Section, Spinner } from '../components/ui';
 import { api, type PresetSummary } from '../lib/api';
 import { cx, formatClock, modeLabel } from '../lib/format';
-import { useStore } from '../lib/store';
+import { play, unlockAudio } from '../lib/sound';
+import { useStore, type Tab } from '../lib/store';
+
+/**
+ * Four modes carry the grid. The rest are real modes, not filler, but eight
+ * tiles competing at equal weight meant nobody read any of them.
+ */
+const FEATURED: GameMode[] = ['classic', 'duel', 'blitz', 'elimination'];
+
+// Daily is a tab of its own, so it never appears as a tile.
+const FEATURED_MODES: ModeDescriptor[] = FEATURED.map((id) =>
+  MODE_LIST.find((m) => m.id === id),
+).filter((m): m is ModeDescriptor => m !== undefined);
+
+const MORE_MODES: ModeDescriptor[] = MODE_LIST.filter(
+  (m) => m.id !== 'daily' && !FEATURED.includes(m.id),
+);
+
+const SHORTCUTS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'friends', label: 'Friends', icon: 'users' },
+  { id: 'ranks', label: 'Ranks', icon: 'trophy' },
+  { id: 'profile', label: 'Profile', icon: 'medal' },
+  { id: 'stats', label: 'Stats', icon: 'chart' },
+  { id: 'info', label: 'Info', icon: 'info' },
+];
+
+/** Server stats are staff-only, so the link to them is too. */
+const STAFF_ROLES = ['moderator', 'admin'];
 
 /**
  * The numbers that actually differ between modes, on one line. The prose
- * tagline moves to the tile's tooltip so eight modes fit in two rows instead
- * of eight paragraphs.
+ * tagline lives on the tile's tooltip so the grid stays two lines a tile.
  */
 function modeMeta(mode: ModeDescriptor): string {
   const s = defaultsForMode(mode.id);
@@ -30,6 +56,12 @@ function modeMeta(mode: ModeDescriptor): string {
   return `${players} · ${rounds} · ${clock}`;
 }
 
+/** Home is the first thing anyone touches, so it is where audio gets its gesture. */
+function tap(): void {
+  unlockAudio();
+  play('click');
+}
+
 export function Home() {
   const publicRooms = useStore((s) => s.publicRooms);
   const refreshLobby = useStore((s) => s.refreshLobby);
@@ -38,10 +70,15 @@ export function Home() {
   const joinRoom = useStore((s) => s.joinRoom);
   const setTab = useStore((s) => s.setTab);
   const toast = useStore((s) => s.toast);
+  const presence = useStore((s) => s.presence);
+  const invites = useStore((s) => s.invites);
+  const role = useStore((s) => s.user)?.role;
 
   const [code, setCode] = useState('');
   const [customOpen, setCustomOpen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [busy, setBusy] = useState<GameMode | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     refreshLobby();
@@ -49,7 +86,20 @@ export function Home() {
     return () => window.clearInterval(id);
   }, [refreshLobby]);
 
+  // Only ticks while an invite is on screen. Invites are the one thing here
+  // with a deadline; nothing else on this page needs a per-second re-render.
+  useEffect(() => {
+    if (invites.length === 0) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [invites.length]);
+
+  const shortcuts = SHORTCUTS.filter((s) => s.id !== 'stats' || STAFF_ROLES.includes(role ?? ''));
+  // An expired invite is dead weight: the store keeps it, the screen drops it.
+  const pending = invites.filter((invite) => invite.expiresAt > now);
+
   async function launch(mode: GameMode, viaQuickplay: boolean) {
+    tap();
     setBusy(mode);
     try {
       if (mode === 'daily') {
@@ -65,7 +115,55 @@ export function Home() {
 
   return (
     <div className="page" style={{ gap: 'var(--s4)' }}>
-      {/* ---------------------------------------------------------- hero */}
+      {/* --------------------------------------------------------- invites */}
+      {pending.length > 0 && (
+        <div className="col" style={{ gap: 'var(--s1)' }}>
+          {pending.map((invite) => (
+            <motion.div
+              key={invite.id}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="row"
+              style={{
+                gap: 'var(--s3)',
+                padding: 'var(--s2) var(--s3)',
+                borderRadius: 'var(--r)',
+                background: 'var(--accent-soft)',
+                border: '1px solid var(--accent)',
+              }}
+            >
+              <Avatar user={invite.from} size={28} />
+              <span className="grow col" style={{ minWidth: 0, gap: 1 }}>
+                <span className="truncate" style={{ fontSize: 13.5 }}>
+                  <span className="bold">{invite.from.displayName}</span> invited you to{' '}
+                  {modeLabel(invite.mode)}
+                </span>
+                <span className="faint thin mono" style={{ fontSize: 12 }}>
+                  {formatClock(invite.expiresAt - now)} left · {invite.code}
+                </span>
+              </span>
+              <button
+                className="btn btn--primary btn--sm"
+                onClick={() => {
+                  tap();
+                  void useStore.getState().acceptInvite(invite.code);
+                }}
+              >
+                Accept
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => useStore.getState().dismissInvite(invite.id)}
+              >
+                Dismiss
+              </button>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------ top actions */}
       <motion.section
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -73,11 +171,37 @@ export function Home() {
         className="col"
         style={{ gap: 'var(--s2)' }}
       >
-        <h1>Find the word before they do.</h1>
+        <div className="row row--between" style={{ gap: 'var(--s3)' }}>
+          <h1>Find the word before they do.</h1>
+          <div className="row" style={{ gap: 'var(--s2)', flex: 'none' }}>
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                flex: 'none',
+                background: presence.online > 0 ? 'var(--green)' : 'var(--surface-3)',
+              }}
+            />
+            <span className="col" style={{ gap: 0 }}>
+              {/* "0 playing now" reads as broken. "Quiet right now" reads as true. */}
+              <span className="bold mono" style={{ fontSize: 15 }}>
+                {presence.online > 0 ? `${presence.online} playing now` : 'Quiet right now'}
+              </span>
+              {presence.online > 0 && (
+                <span className="faint thin mono" style={{ fontSize: 12 }}>
+                  {presence.inGame} in a game · {presence.rooms} rooms
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+
         <p className="dim thin" style={{ margin: 0, fontSize: 13.5 }}>
           Every guess comes back with a rank — how close it is to the secret word. Rank 1 is the
           word.
         </p>
+
         <div className="row row--wrap" style={{ gap: 'var(--s2)' }}>
           <button
             className="btn btn--primary btn--lg"
@@ -85,7 +209,14 @@ export function Home() {
             onClick={() => void launch('classic', true)}
           >
             {busy === 'classic' ? <Spinner /> : <ModeIcon name="bolt" size={16} />}
-            Quick match
+            <span className="col" style={{ gap: 0, alignItems: 'flex-start', lineHeight: 1.25 }}>
+              <span style={{ fontSize: 16 }}>Quick match</span>
+              {/* Same ink as the label, dropped back — a second colour on the
+                  accent fill would fail contrast in at least one theme. */}
+              <span className="thin" style={{ fontSize: 12, opacity: 0.82 }}>
+                ranked · 10 players
+              </span>
+            </span>
           </button>
           <button
             className="btn btn--lg"
@@ -93,74 +224,73 @@ export function Home() {
             onClick={() => void launch('duel', true)}
           >
             {busy === 'duel' ? <Spinner /> : <ModeIcon name="swords" size={16} />}
-            Find a duel
+            Duel
           </button>
-          <button className="btn btn--lg" onClick={() => setCustomOpen(true)}>
+          <button className="btn btn--lg" onClick={() => void launch('daily', false)}>
+            <ModeIcon name="calendar" size={16} />
+            Daily
+          </button>
+          <button
+            className="btn btn--lg"
+            onClick={() => {
+              tap();
+              setCustomOpen(true);
+            }}
+          >
             <ModeIcon name="plus" size={16} />
             Custom game
           </button>
-          <span className="faint thin" style={{ fontSize: 12.5, maxWidth: 250 }}>
-            quick match is 10 players and starts itself. custom game has the settings.
-          </span>
         </div>
+        <span className="faint thin" style={{ fontSize: 12.5 }}>
+          Quick match finds a game and starts it for you. Custom game has the settings.
+        </span>
       </motion.section>
 
-      {/* ---------------------------------------------------------- modes */}
+      {/* ------------------------------------------------------------ modes */}
       <Section
         title="Game modes"
         action={
-          <span className="faint thin" style={{ fontSize: 12 }}>
-            pick one to start it
-          </span>
-        }
-      >
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))', gap: 'var(--s2)' }}
-        >
-          {MODE_LIST.map((mode) => (
-            <button
-              key={mode.id}
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void launch(mode.id, false)}
-              // The written-out description still exists, it just lives on hover.
-              title={mode.tagline}
-              className="panel panel--interactive col"
+          <button
+            className="btn btn--ghost btn--sm"
+            aria-expanded={showMore}
+            onClick={() => {
+              unlockAudio();
+              setShowMore((v) => !v);
+            }}
+          >
+            {showMore ? 'Fewer modes' : 'More modes'}
+            <span
               style={{
-                padding: 'var(--s3)',
-                gap: 2,
-                textAlign: 'left',
-                alignItems: 'stretch',
-                opacity: busy !== null && busy !== mode.id ? 0.5 : 1,
+                display: 'flex',
+                transform: showMore ? 'rotate(90deg)' : 'none',
+                transition: 'transform 0.14s',
               }}
             >
-              <div className="row" style={{ gap: 'var(--s2)' }}>
-                <span style={{ display: 'flex', color: 'var(--accent)', flex: 'none' }}>
-                  {busy === mode.id ? (
-                    <Spinner size={16} />
-                  ) : (
-                    <ModeIcon name={mode.icon} size={16} />
-                  )}
-                </span>
-                <span className="bold grow truncate" style={{ fontSize: 14 }}>
-                  {mode.name}
-                </span>
-              </div>
-              <span className="faint truncate" style={{ fontSize: 12 }}>
-                {modeMeta(mode)}
-              </span>
-            </button>
-          ))}
+              <ModeIcon name="chevron" size={14} />
+            </span>
+          </button>
+        }
+      >
+        <div className="col" style={{ gap: 'var(--s2)' }}>
+          <ModeGrid modes={FEATURED_MODES} busy={busy} onPick={launch} />
+          {showMore && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <ModeGrid modes={MORE_MODES} busy={busy} onPick={launch} />
+            </motion.div>
+          )}
         </div>
       </Section>
 
-      {/* ------------------------------------------------- join + lobbies */}
+      {/* -------------------------------------------------- join + lobbies */}
       <div
         className="grid"
         style={{
           gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: 'var(--s4) var(--s5)',
+          gap: 'var(--s3) var(--s5)',
           alignItems: 'start',
         }}
       >
@@ -169,6 +299,7 @@ export function Home() {
             className="row"
             onSubmit={async (e) => {
               e.preventDefault();
+              tap();
               const trimmed = code.trim().toUpperCase();
               if (trimmed.length < 4) {
                 toast('warn', 'Room codes are four characters');
@@ -197,9 +328,6 @@ export function Home() {
               Join
             </button>
           </form>
-          <span className="faint thin" style={{ fontSize: 12 }}>
-            four characters, from whoever is hosting.
-          </span>
         </Section>
 
         <Section
@@ -209,7 +337,13 @@ export function Home() {
               <span className="faint thin" style={{ fontSize: 12 }}>
                 {publicRooms.length} public
               </span>
-              <button className="btn btn--ghost btn--sm" onClick={refreshLobby}>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => {
+                  unlockAudio();
+                  refreshLobby();
+                }}
+              >
                 Refresh
               </button>
             </div>
@@ -224,7 +358,7 @@ export function Home() {
           ) : (
             // Capped so a busy night scrolls inside the list rather than
             // pushing the rest of the page off the screen.
-            <div className="col" style={{ gap: 'var(--s1)', maxHeight: 168, overflowY: 'auto' }}>
+            <div className="col" style={{ gap: 'var(--s1)', maxHeight: 152, overflowY: 'auto' }}>
               {publicRooms.map((room) => (
                 // A room that already started seats you as a spectator — the
                 // server decides that, the live chip is the heads-up.
@@ -232,7 +366,10 @@ export function Home() {
                   key={room.code}
                   type="button"
                   className="row"
-                  onClick={() => void joinRoom(room.code)}
+                  onClick={() => {
+                    tap();
+                    void joinRoom(room.code);
+                  }}
                   style={{
                     gap: 'var(--s3)',
                     padding: '6px var(--s3)',
@@ -267,7 +404,79 @@ export function Home() {
         </Section>
       </div>
 
+      {/* -------------------------------------------------------- shortcuts */}
+      <div
+        className="row row--wrap"
+        style={{ gap: 'var(--s1)', paddingTop: 'var(--s2)', borderTop: '1px solid var(--line)' }}
+      >
+        {shortcuts.map((shortcut) => (
+          <button
+            key={shortcut.id}
+            className="btn btn--ghost btn--sm"
+            onClick={() => {
+              unlockAudio();
+              useStore.getState().setTab(shortcut.id);
+            }}
+          >
+            <ModeIcon name={shortcut.icon} size={14} />
+            {shortcut.label}
+          </button>
+        ))}
+      </div>
+
       <CustomGameModal open={customOpen} onClose={() => setCustomOpen(false)} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Mode grid
+ * ------------------------------------------------------------------ */
+
+function ModeGrid({
+  modes,
+  busy,
+  onPick,
+}: {
+  modes: ModeDescriptor[];
+  busy: GameMode | null;
+  onPick: (mode: GameMode, viaQuickplay: boolean) => void;
+}) {
+  return (
+    <div
+      className="grid"
+      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 'var(--s2)' }}
+    >
+      {modes.map((mode) => (
+        <button
+          key={mode.id}
+          type="button"
+          disabled={busy !== null}
+          onClick={() => onPick(mode.id, false)}
+          // The written-out description still exists, it just lives on hover.
+          title={mode.tagline}
+          className="panel panel--interactive col"
+          style={{
+            padding: 'var(--s3)',
+            gap: 2,
+            textAlign: 'left',
+            alignItems: 'stretch',
+            opacity: busy !== null && busy !== mode.id ? 0.5 : 1,
+          }}
+        >
+          <div className="row" style={{ gap: 'var(--s2)' }}>
+            <span style={{ display: 'flex', color: 'var(--accent)', flex: 'none' }}>
+              {busy === mode.id ? <Spinner size={16} /> : <ModeIcon name={mode.icon} size={16} />}
+            </span>
+            <span className="bold grow truncate" style={{ fontSize: 14 }}>
+              {mode.name}
+            </span>
+          </div>
+          <span className="faint truncate" style={{ fontSize: 12 }}>
+            {modeMeta(mode)}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -332,6 +541,7 @@ function CustomGameModal({ open, onClose }: { open: boolean; onClose: () => void
             className="btn btn--primary"
             disabled={creating}
             onClick={async () => {
+              play('click');
               setCreating(true);
               const code = await createRoom(settings);
               setCreating(false);

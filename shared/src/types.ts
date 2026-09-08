@@ -3,6 +3,8 @@
  * Everything here is structurally cloneable JSON.
  */
 
+import type { GameInvite, PublicPresence, StatusMessage } from './social.js';
+
 /* ------------------------------------------------------------------ *
  * Identity
  * ------------------------------------------------------------------ */
@@ -18,6 +20,8 @@ export interface PublicUser {
   title: string | null;
   /** Throwaway account with no Discord behind it. */
   isGuest: boolean;
+  /** player | moderator | admin. Drives the badge and the stats-page gate. */
+  role: string;
 }
 
 export interface SessionPayload {
@@ -77,6 +81,8 @@ export interface GameSettings {
   visibility: Visibility;
   /** End the round the instant somebody finds the word. */
   endOnFirstFind: boolean;
+  /** Mark a word an opponent already played with their name. */
+  showStolenWords: boolean;
   /** Ranked matches move Elo. Only meaningful for duel/classic. */
   ranked: boolean;
   allowSpectators: boolean;
@@ -131,6 +137,15 @@ export interface GuessResult {
   progress: number;
   at: number;
   playerId: string;
+  /**
+   * Set when another player played this exact word earlier in the round.
+   *
+   * You still get the rank — the word is not taken away from you — but the row
+   * records that somebody beat you to it. That is the whole social mechanic of
+   * a duel: burning a word your opponent already has tells you they are on the
+   * same trail, and tells them you are too.
+   */
+  stolenFrom: { playerId: string; displayName: string; rank: number } | null;
   /** True when the guess is a repeat by the same player. */
   repeat: boolean;
   isHint: boolean;
@@ -391,6 +406,11 @@ export interface ClientToServerEvents {
   'chat:send': (payload: { text: string }) => void;
   'emote:send': (payload: { emote: string }) => void;
   'lobby:list': (ack: (r: Ack<PublicRoomSummary[]>) => void) => void;
+
+  /** Invite a friend into whatever room you are currently in. */
+  'friend:invite': (payload: { friendId: string }, ack?: (r: Ack<null>) => void) => void;
+  /** Accept an invite you were pushed, by room code. */
+  'invite:accept': (payload: { code: string }, ack?: (r: Ack<{ code: string }>) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -404,4 +424,13 @@ export interface ServerToClientEvents {
   'match:end': (result: MatchResult) => void;
   toast: (payload: { kind: 'info' | 'success' | 'warn' | 'error'; text: string }) => void;
   error: (payload: { code: string; message: string }) => void;
+
+  /** Live headcount, pushed to everyone on a timer. */
+  presence: (payload: PublicPresence) => void;
+  /** A friend asked you to join their room. */
+  'invite:received': (invite: GameInvite) => void;
+  /** Something about your friend list changed; refetch it. */
+  'friends:changed': () => void;
+  /** A short transient line for the board overlay. */
+  status: (message: StatusMessage) => void;
 }

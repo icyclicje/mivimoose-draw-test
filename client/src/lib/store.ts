@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { io, type Socket } from 'socket.io-client';
 import type {
+  GameInvite,
+  PublicPresence,
+  StatusMessage,
   Ack,
   ClientToServerEvents,
   FeedEntry,
@@ -14,8 +17,9 @@ import type {
 } from '@mivimoose/shared';
 import { connectDiscord, guestLogin, isEmbedded, setActivity, SOCKET_PATH, type DiscordContext } from './discord';
 import { setApiToken } from './api';
+import { play } from './sound';
 
-export type Tab = 'play' | 'daily' | 'ranks' | 'profile';
+export type Tab = 'play' | 'daily' | 'ranks' | 'profile' | 'friends' | 'stats' | 'info';
 
 export interface Toast {
   id: number;
@@ -88,9 +92,32 @@ interface AppState {
   sendChat: (text: string) => void;
   sendEmote: (emote: string) => void;
   clearGuessError: () => void;
+
+  /* ---------------------------------------------------------------- social */
+
+  /** Live headcount, pushed from the server every ten seconds. */
+  presence: PublicPresence;
+  /** Room invites from friends, newest first. */
+  invites: GameInvite[];
+  /**
+   * Bumped whenever the server says a friend list changed. Screens depend on
+   * the number rather than holding the list here: friends are a page-level
+   * concern and keeping one copy in a global store means every screen has to
+   * agree on when it goes stale.
+   */
+  friendsVersion: number;
+  /** Transient lines floated over the board. */
+  statuses: StatusMessage[];
+
+  inviteFriend: (friendId: string) => Promise<boolean>;
+  acceptInvite: (code: string) => Promise<void>;
+  dismissInvite: (id: string) => void;
+  dismissStatus: (id: string) => void;
+  pushStatus: (text: string, tone: StatusMessage['tone'], ttl?: number) => void;
 }
 
 let toastSeq = 0;
+let statusSeq = 0;
 
 export const useStore = create<AppState>((set, get) => ({
   status: 'boot',
@@ -261,6 +288,45 @@ export const useStore = create<AppState>((set, get) => ({
   sendChat: (text) => get().socket?.emit('chat:send', { text }),
   sendEmote: (emote) => get().socket?.emit('emote:send', { emote }),
   clearGuessError: () => set({ guessError: null }),
+
+  /* ---------------------------------------------------------------- social */
+
+  presence: { online: 0, inGame: 0, rooms: 0 },
+  invites: [],
+  friendsVersion: 0,
+  statuses: [],
+
+  async inviteFriend(friendId) {
+    const socket = get().socket;
+    if (!socket) return false;
+    const res = await emit<null>(socket, 'friend:invite', { friendId });
+    if (!res.ok) get().toast('warn', res.error ?? 'Could not send that invite');
+    else get().toast('success', 'Invite sent');
+    return res.ok;
+  },
+
+  async acceptInvite(code) {
+    const socket = get().socket;
+    if (!socket) return;
+    const res = await emit<{ code: string }>(socket, 'invite:accept', { code });
+    if (!res.ok) get().toast('warn', res.error ?? 'Could not join');
+    set((s) => ({ invites: s.invites.filter((i) => i.code !== code), tab: 'play' }));
+  },
+
+  dismissInvite: (id) => set((s) => ({ invites: s.invites.filter((i) => i.id !== id) })),
+  dismissStatus: (id) => set((s) => ({ statuses: s.statuses.filter((m) => m.id !== id) })),
+
+  pushStatus(text, tone, ttl = 2600) {
+    const message: StatusMessage = {
+      id: `local-${++statusSeq}`,
+      text,
+      tone,
+      ttl,
+      priority: 1,
+    };
+    set((s) => ({ statuses: [...s.statuses, message].slice(-4) }));
+    setTimeout(() => get().dismissStatus(message.id), ttl);
+  },
 }));
 
 /* ------------------------------------------------------------------ *
@@ -324,6 +390,24 @@ function finishBoot(ctx: DiscordContext, set: SetState, get: () => AppState) {
   });
 
   socket.on('round:start', () => set({ guessError: null, latestGuessId: null, latestGuess: null, guessSeq: 0 }));
+
+  socket.on('presence', (payload: PublicPresence) => set({ presence: payload }));
+
+  socket.on('invite:received', (invite: GameInvite) => {
+    set((s) => ({
+      // One invite per room; a friend pressing it twice should not stack.
+      invites: [invite, ...s.invites.filter((i) => i.code !== invite.code)].slice(0, 4),
+    }));
+    play('invite');
+    get().toast('info', `${invite.from.displayName} invited you to a game`);
+  });
+
+  socket.on('friends:changed', () => set((s) => ({ friendsVersion: s.friendsVersion + 1 })));
+
+  socket.on('status', (message: StatusMessage) => {
+    set((s) => ({ statuses: [...s.statuses, message].slice(-4) }));
+    setTimeout(() => get().dismissStatus(message.id), message.ttl);
+  });
 
   socket.on('toast', ({ kind, text }) => get().toast(kind, text));
   socket.on('error', ({ message }) => get().toast('error', message));

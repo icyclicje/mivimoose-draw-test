@@ -193,10 +193,16 @@ async function testCoop(players) {
   await wait(200);
   check('a guess spends from the shared budget', host.state?.teamGuessesLeft === 5, `left=${host.state?.teamGuessesLeft}`);
 
-  await ask(guests[0].socket, 'game:guess', { word: 'sailor' });
-  await wait(200);
+  // Capture the ack: a silently rejected guess used to show up here only as a
+  // confusing "board has one word" failure with no reason attached.
+  const teamGuess = await ask(guests[0].socket, 'game:guess', { word: 'sailor' });
+  await wait(300);
   const board = (host.state?.players ?? []).flatMap((p) => p.guesses ?? []);
-  check('the whole team sees every guess', board.length === 2, `board=${board.map((g) => g.word).join(',')}`);
+  check(
+    'the whole team sees every guess',
+    board.length === 2,
+    `board=${board.map((g) => g.word).join(',')} secondAck=${JSON.stringify(teamGuess)}`,
+  );
 
   for (const p of players.slice(0, 3)) await ask(p.socket, 'room:leave');
 }

@@ -1,4 +1,9 @@
 import type {
+  FriendList,
+  MatchReplay,
+  PublicUser,
+  ServerStats,
+  StatsRange,
   DailyChallengeState,
   GameSettings,
   GuessResult,
@@ -107,4 +112,33 @@ export const api = {
       words: { input: string; ok: boolean; word: string | null; note: string | null }[];
       usable: string[];
     }>('/words/validate', { method: 'POST', body: JSON.stringify({ words }) }),
+
+  /* -------------------------------------------------------------- friends */
+
+  friends: () => request<FriendList>('/friends'),
+
+  searchPlayers: (q: string) =>
+    request<{ results: PublicUser[] }>(`/friends/search?q=${encodeURIComponent(q)}`),
+
+  addFriend: (userId: string) =>
+    request<{ status: string }>(`/friends/${userId}`, { method: 'POST' }),
+
+  respondToFriend: (userId: string, accept: boolean) =>
+    request<{ status: string }>(`/friends/${userId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ accept }),
+    }),
+
+  removeFriend: (userId: string) => request<void>(`/friends/${userId}`, { method: 'DELETE' }),
+
+  /* ------------------------------------------------- presence and stats */
+
+  presence: () => request<{ online: number }>('/presence'),
+
+  /** Moderators only; throws ApiError 403 for everyone else. */
+  stats: (range: StatsRange) => request<ServerStats>(`/stats?range=${range}`),
+
+  /* --------------------------------------------------------- match replay */
+
+  replay: (matchId: string) => request<MatchReplay>(`/match/${matchId}/replay`),
 };

@@ -31,6 +31,8 @@ model User {
   // Progression
   xp          Int    @default(0)
   title       String?
+  /// player | moderator | admin. Seeded from MODERATOR_NAMES on sign-in.
+  role        String @default("player")
 
   // Aggregates kept denormalised so the leaderboard is a single indexed read.
   matches       Int @default(0)
@@ -49,6 +51,10 @@ model User {
   achievements UserAchievement[]
   presets      GamePreset[]
   memberships  GuildMember[]
+  /// Friendships this user opened.
+  sentRequests     Friendship[] @relation("FriendshipRequester")
+  /// Friendships opened by somebody else.
+  receivedRequests Friendship[] @relation("FriendshipAddressee")
 
   @@index([xp])
   @@index([wins])
@@ -211,4 +217,42 @@ model UserAchievement {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
+}
+
+/// One row per relationship, not two. The pair is stored ordered by role
+/// (requester/addressee) so "who asked" survives, and a unique index on the
+/// pair stops duplicate requests in either direction being created.
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  addresseeId String
+  /// pending | accepted | blocked
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+/// A periodic headcount, written by the server on a timer.
+///
+/// Storing samples rather than deriving from matches means the graph can show
+/// people sitting in menus, not just people mid-round, and one row every few
+/// minutes stays small enough to query over a year without aggregation.
+model PlayerSample {
+  id         String   @id @default(cuid())
+  takenAt    DateTime @default(now())
+  /// Sockets connected.
+  online     Int      @default(0)
+  /// Players inside a live round.
+  inGame     Int      @default(0)
+  /// Rooms that exist at all.
+  rooms      Int      @default(0)
+
+  @@index([takenAt])
 }

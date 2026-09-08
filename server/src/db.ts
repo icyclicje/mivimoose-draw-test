@@ -37,8 +37,30 @@ function hashToRange(input: string, buckets: number): number {
   return (h >>> 0) % buckets;
 }
 
+/**
+ * Accounts that get the moderator role, matched on Discord username or display
+ * name, case-insensitively.
+ *
+ * Matching on name rather than on a snowflake is a deliberate trade: it means
+ * moderators are granted the first time they sign in, without anyone having to
+ * look up ids first. It also means a name is all it takes, so this list is only
+ * safe because the role grants read access to the stats page and nothing else.
+ * Anything destructive should move to explicit Discord ids.
+ */
+const MODERATOR_NAMES = new Set(['silk', 'cinnamings', 'gerg4495', 'farmmerchant']);
+
+function roleFor(profile: DiscordProfile): string {
+  const names = [profile.username, profile.global_name ?? '']
+    .map((n) => n.trim().toLowerCase())
+    .filter(Boolean);
+  return names.some((n) => MODERATOR_NAMES.has(n)) ? 'moderator' : 'player';
+}
+
 export async function upsertUserFromDiscord(profile: DiscordProfile) {
+  // The Discord name is the account name, and it stays that way: re-login
+  // rewrites it, so a rename on Discord shows up here on the next sign-in.
   const displayName = profile.global_name?.trim() || profile.username;
+  const role = roleFor(profile);
   return prisma.user.upsert({
     where: { discordId: profile.id },
     create: {
@@ -47,12 +69,15 @@ export async function upsertUserFromDiscord(profile: DiscordProfile) {
       displayName,
       avatar: profile.avatar ?? null,
       locale: profile.locale ?? null,
+      role,
     },
     update: {
       username: profile.username,
       displayName,
       avatar: profile.avatar ?? null,
       lastSeenAt: new Date(),
+      // Only ever promotes. A hand-granted admin is never demoted by a sign-in.
+      ...(role === 'moderator' ? { role } : {}),
     },
   });
 }
@@ -69,6 +94,7 @@ export function toPublicUser(user: UserRow, rating = BASE_RATING): PublicUser {
     rating,
     title: user.title ?? null,
     isGuest: user.isGuest,
+    role: user.role,
   };
 }
 

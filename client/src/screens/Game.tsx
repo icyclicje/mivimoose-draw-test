@@ -6,15 +6,43 @@ import {
   type RoomState,
   type RoundSummary,
 } from '@mivimoose/shared';
-import { Countdown, Feed, GuessList } from '../components/game';
+import { Chat } from '../components/Chat';
+import { Countdown, GuessList } from '../components/game';
 import { Logo } from '../components/Logo';
 import { ModeIcon } from '../components/ModeIcon';
-import { Avatar } from '../components/ui';
-import { bandColor, cx, formatDuration, formatRank, modeLabel, ordinal } from '../lib/format';
+import { StatusOverlay } from '../components/StatusOverlay';
+import { Avatar, Spinner } from '../components/ui';
+import {
+  bandColor,
+  cx,
+  formatAway,
+  formatDuration,
+  formatRank,
+  modeLabel,
+  ordinal,
+} from '../lib/format';
+import { play, playRank, unlockAudio } from '../lib/sound';
 import { useCountdown } from '../hooks/useCountdown';
 import { useStore } from '../lib/store';
 
-const EMOTES = ['🔥', '🥶', '😭', '🤝', '👀', '🧠', '💀', '🎉'];
+/**
+ * Click sound plus the audio unlock. A match can begin before this player has
+ * pressed anything at all — quickplay drops you straight onto the board — so
+ * every button here has to be able to be the gesture that opens audio.
+ */
+function tap(): void {
+  unlockAudio();
+  play('click');
+}
+
+/**
+ * Which round's countdown has already been announced, as `code:round`.
+ *
+ * Module level rather than a ref on purpose. App keeps this screen mounted
+ * across countdown, playing and roundEnd, and StrictMode remounts it with fresh
+ * refs in development — a ref would miss the first round or replay the cue.
+ */
+let cuedCountdown: string | null = null;
 
 export function Game({ room }: { room: RoomState }) {
   const user = useStore((s) => s.user);
@@ -29,13 +57,12 @@ export function Game({ room }: { room: RoomState }) {
   // Bumped on every submission, so replaying a word the board already holds
   // still re-flashes the pinned row.
   const guessSeq = useStore((s) => s.guessSeq);
-  const sendChat = useStore((s) => s.sendChat);
-  const sendEmote = useStore((s) => s.sendEmote);
   const leaveRoom = useStore((s) => s.leaveRoom);
+  const connected = useStore((s) => s.connected);
 
   const [word, setWord] = useState('');
-  const [chat, setChat] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [hinting, setHinting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [watching, setWatching] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,10 +99,13 @@ export function Game({ room }: { room: RoomState }) {
   );
 
   const myTurn = !room.activePlayerId || room.activePlayerId === user?.id;
-  const frozen = me?.frozenUntil && me.frozenUntil > Date.now() + clockOffset;
+  // Written as an explicit null check so the value is a boolean rather than
+  // `number | null | undefined` leaking into the effect dependencies.
+  const frozen = me?.frozenUntil != null && me.frozenUntil > Date.now() + clockOffset;
+  // A spectator has no budget, so showing them one was showing them somebody
+  // else's number.
   const guessesLeft =
-    room.settings.guessLimit > 0 ? room.settings.guessLimit - (me?.guessCount ?? 0) : null;
-
+    me && room.settings.guessLimit > 0 ? room.settings.guessLimit - me.guessCount : null;
 
   const lastEntry = room.feed[room.feed.length - 1];
 
@@ -87,6 +117,19 @@ export function Game({ room }: { room: RoomState }) {
   useEffect(() => {
     setWatching(null);
   }, [room.round]);
+
+  // One start cue per round. Room patches arrive several times a second and the
+  // screen mounts already in the countdown for round one, so the marker — not
+  // the phase transition — is what the sound hangs on.
+  useEffect(() => {
+    if (room.phase !== 'countdown') return;
+    const key = `${room.code}:${room.round}`;
+    if (cuedCountdown === key) return;
+    cuedCountdown = key;
+    // Silent unless a gesture has already unlocked audio, which is what we want:
+    // nothing on this screen should be the thing that starts making noise.
+    play('start');
+  }, [room.phase, room.code, room.round]);
 
   const canGuess =
     room.phase === 'playing' &&
@@ -100,13 +143,43 @@ export function Game({ room }: { room: RoomState }) {
     e.preventDefault();
     const value = word.trim();
     if (!value || submitting) return;
+    // Submitting is usually the first gesture on this screen, so it is where
+    // audio can legally start. Enter counts as one too.
+    unlockAudio();
     setSubmitting(true);
-    const result = await guess(value);
-    setSubmitting(false);
-    if (result) setWord('');
-    // Enter always leaves you ready to type the next word: accepted, the box is
-    // empty and focused; rejected, the word is still there to edit.
-    inputRef.current?.focus();
+    try {
+      const result = await guess(value);
+      // The rank cue carries the same information as the bar, in a channel you
+      // do not have to be looking at.
+      if (result) {
+        playRank(result.rank);
+        setWord('');
+      } else {
+        play('error');
+      }
+    } finally {
+      // In a finally block so a throw anywhere above cannot leave the input
+      // read-only and the button dead for the rest of the round.
+      setSubmitting(false);
+      // Enter always leaves you ready to type the next word: accepted, the box
+      // is empty and focused; rejected, the word is still there to edit.
+      inputRef.current?.focus();
+    }
+  }
+
+  // Hints are a limited resource and the request can take a moment, so the
+  // button has to stay shut until the server has answered. Without the guard a
+  // second click spends a second hint.
+  async function askHint() {
+    if (hinting || !canGuess) return;
+    tap();
+    setHinting(true);
+    try {
+      await hint();
+    } finally {
+      setHinting(false);
+      inputRef.current?.focus();
+    }
   }
 
   return (
@@ -131,6 +204,9 @@ export function Game({ room }: { room: RoomState }) {
 
         <span className="grow" />
 
+        {/* The board keeps rendering the last state the server sent, so without
+            this the game looks live while nothing is getting through. */}
+        {!connected && <span className="chip chip--warn">reconnecting</span>}
         {guessesLeft !== null && (
           <span
             className="mono faint"
@@ -165,7 +241,8 @@ export function Game({ room }: { room: RoomState }) {
                 room.activePlayerId === player.user.id && 'roster__item--active',
                 out && 'roster__item--out',
               )}
-              title={`${player.user.displayName} · ${player.score.toLocaleString()} pts · ${player.guessCount} guesses${
+              // The distance is repeated here because the pill clips it.
+              title={`${player.user.displayName} · ${formatAway(player.bestRank)} · ${player.score.toLocaleString()} pts · ${player.guessCount} guesses${
                 player.strikes > 0 ? ` · ${player.strikes} strikes` : ''
               }`}
             >
@@ -180,8 +257,15 @@ export function Game({ room }: { room: RoomState }) {
                   {'✕'.repeat(player.strikes)}
                 </span>
               )}
-              <span className="roster__rank" style={{ color: heat }}>
-                {formatRank(player.bestRank)}
+              {/* "8,002 away" reads as a gap you are closing where a bare
+                  number reads as nothing. It is also long, so it clips at a
+                  fixed width instead of stretching the pill and pushing the
+                  players after it off the strip. */}
+              <span
+                className="roster__rank truncate"
+                style={{ color: heat, maxWidth: 78, flex: 'none' }}
+              >
+                {formatAway(player.bestRank)}
               </span>
             </div>
           );
@@ -253,16 +337,26 @@ export function Game({ room }: { room: RoomState }) {
             ) : null}
           </span>
 
+          {/* A guess can wait on a slow server for several seconds. Outside the
+              live region above, so it is visible without being read out on
+              every word. */}
+          {submitting && (
+            <span className="row faint" style={{ gap: 'var(--s2)', flex: 'none' }}>
+              <Spinner size={13} />
+              checking
+            </span>
+          )}
+
           {/* The hint count rides on its own button rather than being repeated
               in the status bar — it only means anything where you spend it. */}
           {room.settings.hints > 0 && me && (
             <button
               type="button"
               className="btn btn--sm"
-              disabled={!canGuess || me.hintsLeft <= 0}
-              onClick={() => void hint()}
+              disabled={!canGuess || me.hintsLeft <= 0 || hinting}
+              onClick={() => void askHint()}
             >
-              <ModeIcon name="spark" size={13} />
+              {hinting ? <Spinner size={13} /> : <ModeIcon name="spark" size={13} />}
               Hint ({me.hintsLeft})
             </button>
           )}
@@ -274,13 +368,20 @@ export function Game({ room }: { room: RoomState }) {
               type="button"
               className="btn btn--ghost btn--sm"
               disabled={!canGuess}
-              onClick={giveUp}
+              onClick={() => {
+                tap();
+                giveUp();
+              }}
             >
               Give up
             </button>
           )}
         </div>
       </form>
+
+      {/* Server commentary — who just took the lead, who is closing in. It sits
+          on the path your eye already takes from the word box to the board. */}
+      <StatusOverlay />
 
       {/* ------------------------------------------------------- board */}
       <div className="col" style={{ gap: 'var(--s2)', minWidth: 0 }}>
@@ -291,7 +392,10 @@ export function Game({ room }: { room: RoomState }) {
             <button
               type="button"
               className={cx('chip', watching === null && 'chip--brand')}
-              onClick={() => setWatching(null)}
+              onClick={() => {
+                tap();
+                setWatching(null);
+              }}
             >
               your board
             </button>
@@ -300,7 +404,10 @@ export function Game({ room }: { room: RoomState }) {
                 key={player.user.id}
                 type="button"
                 className={cx('chip', watching === player.user.id && 'chip--brand')}
-                onClick={() => setWatching(player.user.id)}
+                onClick={() => {
+                  tap();
+                  setWatching(player.user.id);
+                }}
                 title={`Watch ${player.user.displayName}`}
               >
                 {player.user.displayName}
@@ -342,8 +449,12 @@ export function Game({ room }: { room: RoomState }) {
           beside the board while you are guessing. */}
       <div className="drawer">
         <button
+          type="button"
           className="drawer__toggle"
-          onClick={() => setDrawerOpen((open) => !open)}
+          onClick={() => {
+            tap();
+            setDrawerOpen((open) => !open);
+          }}
           aria-expanded={drawerOpen}
         >
           <span
@@ -365,57 +476,28 @@ export function Game({ room }: { room: RoomState }) {
         </button>
 
         {drawerOpen && (
-          <div className="drawer__body col" style={{ gap: 'var(--s2)' }}>
-            {/* Fixed height: the feed keeps its own scroll and stays pinned to
-                the newest line instead of stretching the drawer. */}
-            <div className="col" style={{ height: 148, minHeight: 0 }}>
-              <Feed entries={room.feed} meId={user?.id ?? null} />
-            </div>
-
-            {room.settings.emotesEnabled && (
-              <div className="row row--wrap" style={{ gap: 'var(--s1)' }}>
-                {EMOTES.map((emote) => (
-                  <button
-                    key={emote}
-                    className="btn btn--ghost btn--sm"
-                    style={{ padding: '0 var(--s2)', fontSize: 16 }}
-                    onClick={() => sendEmote(emote)}
-                  >
-                    {emote}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {room.settings.chatEnabled && (
-              <form
-                className="row"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const text = chat.trim();
-                  if (!text) return;
-                  sendChat(text);
-                  setChat('');
-                }}
-              >
-                <input
-                  className="input grow"
-                  style={{ height: 34 }}
-                  placeholder="say something"
-                  value={chat}
-                  maxLength={240}
-                  onChange={(e) => setChat(e.target.value)}
-                />
-                <button className="btn btn--sm" type="submit" disabled={!chat.trim()}>
-                  Send
-                </button>
-              </form>
-            )}
+          // Chat scrolls its own log and keeps the composer pinned, so the
+          // drawer gives it a fixed box to divide up rather than scrolling as
+          // well. Two nested scrollers would drag the message field out of
+          // reach mid-conversation.
+          <div
+            className="drawer__body"
+            style={{ display: 'flex', flexDirection: 'column', height: 260, overflow: 'hidden' }}
+          >
+            <Chat room={room} />
           </div>
         )}
       </div>
 
-      <button className="btn btn--ghost btn--sm" onClick={leaveRoom} style={{ alignSelf: 'center' }}>
+      <button
+        type="button"
+        className="btn btn--ghost btn--sm"
+        onClick={() => {
+          tap();
+          leaveRoom();
+        }}
+        style={{ alignSelf: 'center' }}
+      >
         Leave match
       </button>
 
@@ -519,77 +601,87 @@ function RoundReveal({
         {/* Short screens: everything between the word and the next-round clock
             scrolls on its own rather than pushing the panel off the viewport. */}
         <div className="col" style={{ gap: 'var(--s3)', minHeight: 0, overflowY: 'auto' }}>
-          <div className="col" style={{ gap: 'var(--s2)' }}>
-            <div className="eyebrow">Closest words</div>
-            <div className="row row--wrap" style={{ gap: 'var(--s1)' }}>
-              {summary.neighbours.map((n) => (
-                <span key={n.word} className="chip">
-                  {n.word}
-                  <span className="mono faint">{n.rank}</span>
-                </span>
-              ))}
+          {/* Both blocks are omitted rather than left as a heading over nothing:
+              a custom word can come back with no neighbours, and a round
+              everybody sat out has no entries. */}
+          {summary.neighbours.length > 0 && (
+            <div className="col" style={{ gap: 'var(--s2)' }}>
+              <div className="eyebrow">Closest words</div>
+              <div className="row row--wrap" style={{ gap: 'var(--s1)' }}>
+                {summary.neighbours.map((n) => (
+                  <span key={n.word} className="chip">
+                    {n.word}
+                    <span className="mono faint">{n.rank}</span>
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="col" style={{ gap: 'var(--s2)' }}>
-            <div className="eyebrow">How it went</div>
-            <div className="col" style={{ gap: 'var(--s1)' }}>
-              {summary.entries.map((entry) => {
-                const eliminated = summary.eliminated.includes(entry.playerId);
-                return (
-                  <div
-                    key={entry.playerId}
-                    className="row"
-                    style={{
-                      gap: 'var(--s2)',
-                      padding: 'var(--s1) var(--s2)',
-                      borderRadius: 'var(--r-sm)',
-                      background:
-                        entry.playerId === user?.id ? 'var(--accent-soft)' : 'var(--surface-2)',
-                    }}
-                  >
-                    <span className="mono faint" style={{ width: 24, fontSize: 12, flex: 'none' }}>
-                      {ordinal(entry.placement)}
-                    </span>
-                    <span className="grow truncate">{entry.displayName}</span>
-                    {eliminated && (
-                      <span style={{ color: 'var(--pink)', fontSize: 12, flex: 'none' }}>out</span>
-                    )}
-                    <span className="faint mono" style={{ fontSize: 12, flex: 'none' }}>
-                      {entry.guessCount}g
-                    </span>
-                    {entry.foundAt !== null ? (
-                      <span
-                        className="mono"
-                        style={{ fontSize: 13, color: 'var(--green)', flex: 'none' }}
-                      >
-                        {formatDuration(entry.foundAt)}
-                      </span>
-                    ) : (
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 13,
-                          flex: 'none',
-                          color: entry.bestRank
-                            ? bandColor(bandForRank(entry.bestRank))
-                            : 'var(--text-faint)',
-                        }}
-                      >
-                        {formatRank(entry.bestRank)}
-                      </span>
-                    )}
-                    <span
-                      className="mono bold"
-                      style={{ fontSize: 13, minWidth: 44, textAlign: 'right', flex: 'none' }}
+          {summary.entries.length > 0 && (
+            <div className="col" style={{ gap: 'var(--s2)' }}>
+              <div className="eyebrow">How it went</div>
+              <div className="col" style={{ gap: 'var(--s1)' }}>
+                {summary.entries.map((entry) => {
+                  const eliminated = summary.eliminated.includes(entry.playerId);
+                  return (
+                    <div
+                      key={entry.playerId}
+                      className="row"
+                      style={{
+                        gap: 'var(--s2)',
+                        padding: 'var(--s1) var(--s2)',
+                        borderRadius: 'var(--r-sm)',
+                        background:
+                          entry.playerId === user?.id ? 'var(--accent-soft)' : 'var(--surface-2)',
+                      }}
                     >
-                      +{entry.points}
-                    </span>
-                  </div>
-                );
-              })}
+                      <span className="mono faint" style={{ width: 24, fontSize: 12, flex: 'none' }}>
+                        {ordinal(entry.placement)}
+                      </span>
+                      <span className="grow truncate">{entry.displayName}</span>
+                      {eliminated && (
+                        <span style={{ color: 'var(--pink)', fontSize: 12, flex: 'none' }}>out</span>
+                      )}
+                      <span className="faint mono" style={{ fontSize: 12, flex: 'none' }}>
+                        {entry.guessCount}g
+                      </span>
+                      {entry.foundAt !== null ? (
+                        <span
+                          className="mono"
+                          style={{ fontSize: 13, color: 'var(--green)', flex: 'none' }}
+                        >
+                          {formatDuration(entry.foundAt)}
+                        </span>
+                      ) : (
+                        <span
+                          className="mono"
+                          style={{
+                            fontSize: 13,
+                            flex: 'none',
+                            // Null, not falsy: rank 0 does not exist, but a
+                            // truthiness test here reads as though it might.
+                            color:
+                              entry.bestRank !== null
+                                ? bandColor(bandForRank(entry.bestRank))
+                                : 'var(--text-faint)',
+                          }}
+                        >
+                          {formatRank(entry.bestRank)}
+                        </span>
+                      )}
+                      <span
+                        className="mono bold"
+                        style={{ fontSize: 13, minWidth: 44, textAlign: 'right', flex: 'none' }}
+                      >
+                        +{entry.points}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="dim" style={{ textAlign: 'center', fontSize: 13 }}>

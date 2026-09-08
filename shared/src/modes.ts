@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   hints: 1,
   visibility: 'best',
   endOnFirstFind: false,
+  showStolenWords: true,
   ranked: false,
   allowSpectators: true,
   private: false,
@@ -38,7 +39,14 @@ export const MODES: Record<GameMode, ModeDescriptor> = {
     icon: 'flag',
     accent: '#7c8cff',
     locked: [],
-    defaults: { rounds: 3, roundSeconds: 180, maxPlayers: 10, visibility: 'best' },
+    defaults: {
+      rounds: 3,
+      roundSeconds: 180,
+      maxPlayers: 10,
+      visibility: 'best',
+      // A race is over when someone wins it.
+      endOnFirstFind: true,
+    },
   },
   duel: {
     id: 'duel',
