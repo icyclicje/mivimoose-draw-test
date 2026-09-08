@@ -1,0 +1,214 @@
+// Mivimoose Guess — persistence layer.
+//
+// SQLite by default so the project runs with zero infrastructure. Swap the
+// provider to "postgresql" and point DATABASE_URL at your instance for
+// production; every model below is provider agnostic.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  discordId   String   @unique
+  username    String
+  displayName String
+  avatar      String?
+  locale      String?
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  /// Guests are throwaway accounts created without Discord, so anyone can try
+  /// the game (and play against other guests) without linking anything. They
+  /// play normally but stay off the leaderboards.
+  isGuest     Boolean  @default(false)
+
+  // Progression
+  xp          Int    @default(0)
+  title       String?
+
+  // Aggregates kept denormalised so the leaderboard is a single indexed read.
+  matches       Int @default(0)
+  wins          Int @default(0)
+  wordsFound    Int @default(0)
+  totalGuesses  Int @default(0)
+  stolenWords   Int @default(0)
+  currentStreak Int @default(0)
+  bestStreak    Int @default(0)
+  fastestFindMs Int?
+
+  ratings      Rating[]
+  participants MatchPlayer[]
+  guesses      Guess[]
+  dailyEntries DailyEntry[]
+  achievements UserAchievement[]
+  presets      GamePreset[]
+  memberships  GuildMember[]
+
+  @@index([xp])
+  @@index([wins])
+}
+
+model Guild {
+  id        String        @id
+  name      String
+  icon      String?
+  createdAt DateTime      @default(now())
+  members   GuildMember[]
+  matches   Match[]
+}
+
+model GuildMember {
+  id      String @id @default(cuid())
+  guildId String
+  userId  String
+  guild   Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+}
+
+/// Per-mode Elo. Separated from User so a duel ladder and a classic ladder
+/// can drift apart without extra columns.
+model Rating {
+  id      String @id @default(cuid())
+  userId  String
+  mode    String
+  rating  Int    @default(1000)
+  peak    Int    @default(1000)
+  matches Int    @default(0)
+  wins    Int    @default(0)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mode])
+  @@index([mode, rating])
+}
+
+model Match {
+  id         String    @id @default(cuid())
+  code       String
+  mode       String
+  settings   String // JSON blob of GameSettings
+  guildId    String?
+  ranked     Boolean   @default(false)
+  playerCount Int      @default(0)
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+
+  guild   Guild?        @relation(fields: [guildId], references: [id])
+  rounds  Round[]
+  players MatchPlayer[]
+  guesses Guess[]
+
+  @@index([mode, startedAt])
+  @@index([guildId, startedAt])
+}
+
+model Round {
+  id      String   @id @default(cuid())
+  matchId String
+  index   Int
+  secret  String
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  match   Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, index])
+}
+
+model MatchPlayer {
+  id           String @id @default(cuid())
+  matchId      String
+  userId       String
+  placement    Int    @default(0)
+  score        Int    @default(0)
+  wordsFound   Int    @default(0)
+  totalGuesses Int    @default(0)
+  bestRank     Int?
+  ratingBefore Int?
+  ratingAfter  Int?
+  xpGained     Int    @default(0)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([userId])
+}
+
+model Guess {
+  id       String   @id @default(cuid())
+  matchId  String
+  userId   String
+  round    Int
+  word     String
+  rank     Int
+  stolen   Boolean  @default(false)
+  isHint   Boolean  @default(false)
+  msIntoRound Int   @default(0)
+  createdAt DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, round])
+  @@index([userId])
+}
+
+/// One shared word per UTC day, plus everybody's attempt at it.
+model DailyWord {
+  id      String       @id @default(cuid())
+  date    String       @unique // YYYY-MM-DD
+  word    String
+  entries DailyEntry[]
+}
+
+model DailyEntry {
+  id         String    @id @default(cuid())
+  dailyId    String
+  userId     String
+  guessCount Int       @default(0)
+  solved     Boolean   @default(false)
+  solvedAt   DateTime?
+  guesses    String    @default("[]") // JSON array of GuessResult
+  updatedAt  DateTime  @updatedAt
+
+  daily DailyWord @relation(fields: [dailyId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dailyId, userId])
+  @@index([dailyId, guessCount])
+}
+
+/// Saved custom-game configurations a host can re-launch by name or share by code.
+model GamePreset {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  shareCode String   @unique
+  settings  String // JSON blob of GameSettings
+  uses      Int      @default(0)
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([isPublic, uses])
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}

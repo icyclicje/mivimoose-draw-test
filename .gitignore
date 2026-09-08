@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.local
+.DS_Store
+server/prisma/*.db
+server/prisma/*.db-journal
+# Word data: large, freely re-fetchable with `npm run setup:words`.
+server/data/*
+!server/data/.gitkeep
+client/.vite/
+coverage/

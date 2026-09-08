@@ -1,0 +1,776 @@
+:root {
+  /* Colours live in themes.css — every theme redefines the same tokens.
+     Everything below is invariant: a theme repaints the app, it never
+     relayouts it. */
+
+  /* Semantic aliases so call sites read as intent, not as hue. */
+  --danger: var(--pink);
+  --success: var(--green);
+  --warn: var(--orange);
+
+  /* Nunito's three usable weights, named the way Contexto names them. */
+  --w-thin: 400;
+  --w-normal: 600;
+  --w-bold: 800;
+
+  --r-sm: 5px;
+  --r: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+
+  --font: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Nunito', ui-monospace, monospace;
+
+  --header-h: 52px;
+  --guess-in: 0.16s;
+
+  /* The three heat bands. shared/scoring.ts emits var(--band-*) so the guess
+     bars follow the theme instead of being pinned to one fixed green. Mapping
+     them onto the theme's own hues is what lets the hueless Mono theme stay
+     hueless and the light themes keep their contrast. */
+  --band-hot: var(--green);
+  --band-warm: var(--orange);
+  --band-cold: var(--pink);
+
+  /* Tints derived from the active theme rather than pinned to one palette. */
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --brand-soft: color-mix(in srgb, var(--brand) 16%, transparent);
+  --green-soft: color-mix(in srgb, var(--green) 16%, transparent);
+  --orange-soft: color-mix(in srgb, var(--orange) 16%, transparent);
+  --pink-soft: color-mix(in srgb, var(--pink) 14%, transparent);
+  /* A scrim that darkens light themes and lightens nothing on dark ones. */
+  --scrim: color-mix(in srgb, var(--bg) 88%, #000 12%);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* One spacing scale. Tightened so the common screens fit without scrolling. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 14px;
+  --s5: 18px;
+  --s6: 22px;
+  --s7: 28px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: var(--w-normal);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  font-family: var(--font);
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+input,
+textarea {
+  -webkit-appearance: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: var(--r-pill);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ *
+ * App shell
+ * ------------------------------------------------------------------ */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  height: var(--header-h);
+  padding: 0 var(--s4);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.app__wordmark {
+  font-weight: var(--w-bold);
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.app__wordmark span {
+  color: var(--brand);
+}
+
+.app__nav {
+  display: flex;
+  gap: var(--s1);
+  margin-left: auto;
+}
+
+.app__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--s5) var(--s4) var(--s6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+
+/* The play surface. One centred column, like Contexto: the only chrome above
+   it is the app header. */
+.page--board {
+  max-width: 620px;
+  gap: var(--s3);
+}
+
+.page--wide {
+  max-width: 1280px;
+}
+
+.page--narrow {
+  max-width: 520px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Type
+ * ------------------------------------------------------------------ */
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: var(--w-bold);
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 27px;
+}
+h2 {
+  font-size: 19px;
+}
+h3 {
+  font-size: 15px;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: var(--w-bold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+.faint {
+  color: var(--text-faint);
+}
+.thin {
+  font-weight: var(--w-thin);
+}
+.bold {
+  font-weight: var(--w-bold);
+}
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Surfaces
+ * ------------------------------------------------------------------ */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.panel__body {
+  padding: var(--s4);
+}
+
+/* A panel with no chrome, for grouping without adding another box. */
+.plain {
+  background: transparent;
+  border: none;
+}
+
+/* A panel that is also a control. Flat like everything else, but it has to
+   answer the pointer — the mode tiles on the home screen are primary CTAs and
+   were pointer-inert without this. */
+.panel--interactive {
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, opacity 0.14s;
+}
+
+.panel--interactive:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+}
+
+.panel--interactive:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.panel--interactive:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Buttons
+ * ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  height: 38px;
+  padding: 0 var(--s4);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: var(--w-bold);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  white-space: nowrap;
+  transition:
+    background 0.14s,
+    border-color 0.14s,
+    opacity 0.14s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn--brand {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #2a1a00;
+}
+.btn--brand:hover:not(:disabled) {
+  background: #ffc352;
+  border-color: #ffc352;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  font-weight: var(--w-normal);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.btn--danger {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--pink);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--pink-soft);
+  border-color: var(--pink);
+}
+
+.btn--sm {
+  height: 30px;
+  padding: 0 var(--s3);
+  font-size: 13px;
+}
+
+.btn--lg {
+  height: 46px;
+  padding: 0 var(--s5);
+  font-size: 16px;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* Tabs sit flat on the header, marked by weight and a rule, not a pill. */
+.tab {
+  height: 32px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: var(--w-normal);
+  color: var(--text-faint);
+  transition: color 0.14s, background 0.14s;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab--active {
+  color: var(--text);
+  font-weight: var(--w-bold);
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Chips
+ * ------------------------------------------------------------------ */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  height: 24px;
+  padding: 0 var(--s2);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: var(--w-normal);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.chip--brand {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.chip--accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip--live {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.chip--warn {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+
+/* ------------------------------------------------------------------ *
+ * Fields
+ * ------------------------------------------------------------------ */
+
+.input {
+  width: 100%;
+  height: 42px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-weight: var(--w-normal);
+  outline: none;
+  transition: border-color 0.14s;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+  font-weight: var(--w-thin);
+}
+
+textarea.input {
+  height: auto;
+  padding: var(--s2) var(--s3);
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* The word box. Contexto's is deliberately the biggest thing on screen. */
+.input--word {
+  height: 52px;
+  font-size: 20px;
+  font-weight: var(--w-normal);
+  border-width: 2px;
+  border-color: var(--surface-3);
+}
+.input--word:focus {
+  border-color: var(--text);
+}
+
+.select {
+  height: 34px;
+  padding: 0 30px 0 var(--s3);
+  border-radius: var(--r-sm);
+  background: var(--surface-2)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 8l3-3.5' stroke='%2394a3b8' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  border: 1px solid var(--line-strong);
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+  font-weight: var(--w-normal);
+}
+
+.select:focus {
+  border-color: var(--accent);
+}
+
+.select option {
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Guess rows — the centrepiece, matching Contexto's construction:
+ * a flat track, a colour bar whose width is linear in closeness, and the
+ * word and rank sitting on top of both.
+ * ------------------------------------------------------------------ */
+
+.guess {
+  position: relative;
+  list-style: none;
+  height: 38px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.guess__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--r-sm);
+}
+
+.guess__content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: 100%;
+  padding: 0 10px;
+}
+
+.guess__word {
+  font-size: 17px;
+  font-weight: var(--w-normal);
+  color: var(--text);
+}
+
+.guess__rank {
+  font-size: 17px;
+  font-weight: var(--w-normal);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  margin-left: auto;
+}
+
+/* The guess you just played is marked by being pinned above the list, not by
+   an outline — a ring on a full-width colour bar is just noise. */
+.guess--repeat .guess__word {
+  opacity: 0.85;
+}
+
+.guess--found .guess__word,
+.guess--found .guess__rank {
+  font-weight: var(--w-bold);
+}
+
+/* ------------------------------------------------------------------ *
+ * Layout helpers
+ * ------------------------------------------------------------------ */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.row--between {
+  justify-content: space-between;
+}
+.row--wrap {
+  flex-wrap: wrap;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.stack-lg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+.grid {
+  display: grid;
+  gap: var(--s3);
+}
+
+/* ------------------------------------------------------------------ *
+ * Motion
+ * ------------------------------------------------------------------ */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Board layout
+ *
+ * Contexto puts nothing beside the word list, and that focus is most of why
+ * it feels calm. The multiplayer extras live above and below the column
+ * instead of flanking it: a one-line roster strip up top, and a drawer for
+ * chat that stays shut until you open it.
+ * ------------------------------------------------------------------ */
+
+/* Horizontal roster. Scrolls sideways rather than wrapping, so ten players
+   never push the word box below the fold. */
+.roster {
+  display: flex;
+  gap: var(--s2);
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.roster::-webkit-scrollbar {
+  display: none;
+}
+
+.roster__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+  height: 34px;
+  padding: 0 10px 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  font-size: 13px;
+  transition: border-color 0.14s var(--ease);
+}
+.roster__item--me {
+  background: var(--accent-soft);
+}
+.roster__item--active {
+  border-color: var(--accent);
+}
+.roster__item--out {
+  opacity: 0.45;
+}
+.roster__rank {
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A section that can be folded away. Used for chat and the round feed so the
+   board is the only thing on screen unless you ask for more. */
+.drawer {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.drawer__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--s3);
+  font-size: 13px;
+  font-weight: var(--w-normal);
+  color: var(--text-dim);
+}
+.drawer__toggle:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.drawer__body {
+  padding: var(--s3);
+  border-top: 1px solid var(--line);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* The strip directly under the app header: round, clock, mode. */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  min-height: 30px;
+}
+
+/* Dense key/value grid for stat blocks and settings summaries. */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--s3) var(--s4);
+}
+.metric__label {
+  font-size: 11px;
+  font-weight: var(--w-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.metric__value {
+  font-size: 19px;
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two-column settings rows that collapse to one on a narrow screen. */
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s3) var(--s4);
+}

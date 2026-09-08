@@ -1,0 +1,186 @@
+/* ------------------------------------------------------------------ *
+ * Themes
+ *
+ * Every theme redefines the same fifteen colour tokens and nothing else.
+ * Spacing, radii, type and weights live in global.css and never change, so a
+ * theme can never break a layout — it can only repaint one.
+ *
+ * `color-scheme` matters: it is what makes native scrollbars, form controls
+ * and the browser's own focus rings follow the theme instead of staying dark
+ * on a light page.
+ * ------------------------------------------------------------------ */
+
+/* ---------------------------------------------------------- midnight */
+/* The default. Contexto's own palette. */
+:root,
+[data-theme='midnight'] {
+  color-scheme: dark;
+
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #263449;
+  --surface-3: #334155;
+  --line: #2c3b52;
+  --line-strong: #3d4f6b;
+
+  --text: #ffffff;
+  --text-dim: #94a3b8;
+  --text-faint: #64748b;
+
+  --accent: #009afe;
+  --accent-hover: #33aefe;
+  --brand: #ffb020;
+
+  --green: #00ba7c;
+  --orange: #ef7d31;
+  --pink: #f91880;
+}
+
+/* ---------------------------------------------------------- daylight */
+/* Contexto's light mode. Same hues, inverted ground. */
+[data-theme='daylight'] {
+  color-scheme: light;
+
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eaeef4;
+  --surface-3: #dbe2ec;
+  --line: #dde3ec;
+  --line-strong: #c3ccda;
+
+  --text: #0f172a;
+  --text-dim: #55637a;
+  --text-faint: #8290a5;
+
+  --accent: #0084dc;
+  --accent-hover: #0071bd;
+  --brand: #cc7f00;
+
+  --green: #00a06b;
+  --orange: #e06b1c;
+  --pink: #e00f6f;
+}
+
+/* ------------------------------------------------------------ ember */
+/* Warm dark, built around Mivi's amber rather than Contexto's blue. */
+[data-theme='ember'] {
+  color-scheme: dark;
+
+  --bg: #17120c;
+  --surface: #221a11;
+  --surface-2: #2e2317;
+  --surface-3: #3d2f1e;
+  --line: #33271a;
+  --line-strong: #4a3924;
+
+  --text: #fdf6ec;
+  --text-dim: #c0ab8f;
+  --text-faint: #8d7c66;
+
+  --accent: #ffb020;
+  --accent-hover: #ffc352;
+  --brand: #ffb020;
+
+  --green: #5fbf5f;
+  --orange: #ef9331;
+  --pink: #f2545b;
+}
+
+/* ------------------------------------------------------------- moss */
+[data-theme='moss'] {
+  color-scheme: dark;
+
+  --bg: #0c1512;
+  --surface: #12201b;
+  --surface-2: #1a2c25;
+  --surface-3: #243b32;
+  --line: #1e332b;
+  --line-strong: #2f4b40;
+
+  --text: #eefaf4;
+  --text-dim: #92b3a5;
+  --text-faint: #688376;
+
+  --accent: #2fbf8f;
+  --accent-hover: #4fd3a6;
+  --brand: #e8b64c;
+
+  --green: #35d39a;
+  --orange: #e59b3c;
+  --pink: #e8607f;
+}
+
+/* ------------------------------------------------------------ paper */
+/* Warm light. Easier on the eyes than daylight for a long daily. */
+[data-theme='paper'] {
+  color-scheme: light;
+
+  --bg: #f6f1e7;
+  --surface: #fffdf8;
+  --surface-2: #ece4d6;
+  --surface-3: #ddd2bf;
+  --line: #e3dacb;
+  --line-strong: #c9bca5;
+
+  --text: #2b2418;
+  --text-dim: #6b5f4c;
+  --text-faint: #948877;
+
+  --accent: #b06a1f;
+  --accent-hover: #955718;
+  --brand: #b06a1f;
+
+  --green: #3f8f5f;
+  --orange: #c8722a;
+  --pink: #bf3f5f;
+}
+
+/* ------------------------------------------------------------- neon */
+[data-theme='neon'] {
+  color-scheme: dark;
+
+  --bg: #0a0714;
+  --surface: #140e26;
+  --surface-2: #1e1636;
+  --surface-3: #2c2049;
+  --line: #241a40;
+  --line-strong: #3a2b5e;
+
+  --text: #f4efff;
+  --text-dim: #a396c9;
+  --text-faint: #746793;
+
+  --accent: #00e5ff;
+  --accent-hover: #5cf0ff;
+  --brand: #ffd166;
+
+  --green: #2bf5a8;
+  --orange: #ffa73d;
+  --pink: #ff2d95;
+}
+
+/* -------------------------------------------------------- slate-mono */
+/* No hue at all. Useful if the heat colours are hard to tell apart. */
+[data-theme='mono'] {
+  color-scheme: dark;
+
+  --bg: #101012;
+  --surface: #191a1d;
+  --surface-2: #232427;
+  --surface-3: #313337;
+  --line: #27282c;
+  --line-strong: #3b3d42;
+
+  --text: #f2f2f3;
+  --text-dim: #9c9da2;
+  --text-faint: #6e6f75;
+
+  --accent: #e6e6e8;
+  --accent-hover: #ffffff;
+  --brand: #d8d8da;
+
+  /* Kept distinguishable by lightness rather than hue. */
+  --green: #e9e9ec;
+  --orange: #9a9ba1;
+  --pink: #5a5b61;
+}

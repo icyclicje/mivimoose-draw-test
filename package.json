@@ -1,0 +1,39 @@
+{
+  "name": "mivimoose-guess",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mivimoose Guess \u2014 a multiplayer semantic word-guessing game built as a Discord Activity",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "npm run build -w @mivimoose/shared",
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev -w @mivimoose/server",
+    "dev:client": "npm run dev -w @mivimoose/client",
+    "build": "npm run build -w @mivimoose/shared && npm run build -w @mivimoose/server && npm run build -w @mivimoose/client",
+    "start": "npm run start -w @mivimoose/server",
+    "db:push": "prisma db push --schema server/prisma/schema.prisma",
+    "db:studio": "prisma studio --schema server/prisma/schema.prisma",
+    "seed": "npm run seed -w @mivimoose/server",
+    "build:index": "npm run build:index -w @mivimoose/server",
+    "tunnel": "cloudflared tunnel --url http://localhost:3001",
+    "typecheck": "npm run typecheck -w @mivimoose/shared && npm run typecheck -w @mivimoose/server && npm run typecheck -w @mivimoose/client",
+    "smoke": "node scripts/smoke-duel.mjs && node scripts/smoke-lobby.mjs && node scripts/smoke-modes.mjs && node scripts/smoke-features.mjs",
+    "smoke:duel": "node scripts/smoke-duel.mjs",
+    "smoke:lobby": "node scripts/smoke-lobby.mjs",
+    "smoke:modes": "node scripts/smoke-modes.mjs",
+    "db:generate": "prisma generate --schema server/prisma/schema.prisma",
+    "setup:words": "npm run setup:words -w @mivimoose/server",
+    "smoke:features": "node scripts/smoke-features.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
